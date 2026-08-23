@@ -22,6 +22,7 @@ const DEFAULT_FIELDS = [
   { key: 'crName',         label: 'CR Name',                type: 'text',     enabled: true, core: false },
   { key: 'crMobile',       label: 'CR Phone Number',        type: 'tel',      enabled: true, core: false },
   { key: 'courseNote',     label: 'Note',                   type: 'textarea', enabled: true, core: false },
+  { key: 'defaultRoom',    label: 'Default Room Number',    type: 'text',     enabled: true, core: false },
 ];
 
 const DEFAULT_DAYS = ['Sat','Sun','Mon','Tue','Wed','Thu','Fri'].map((d,i)=>({
@@ -56,7 +57,8 @@ function defaultState(){
     placements: [],      // {id, courseId, dayId, timeId, room, note}
     features: {
       rightClickDelete: true,
-      confirmBeforeDelete: true
+      confirmBeforeDelete: true,
+      clickEmptyCellToAdd: false
     }
   };
 }
@@ -64,18 +66,36 @@ function defaultState(){
 /* ---------- State + persistence ---------- */
 let state = loadState();
 
+function mergeIntoDefaultState(parsed){
+  const base = defaultState();
+  const merged = Object.assign(base, parsed);
+  // features is a nested object — merge its keys individually so an
+  // older/partial saved 'features' object doesn't drop newly-added flags
+  merged.features = Object.assign({}, base.features, parsed.features || {});
+  // fields is a list keyed by 'key' — merge by key so a saved/imported
+  // routine from before a new field existed (e.g. defaultRoom) still picks
+  // it up, instead of parsed.fields silently overwriting the whole array.
+  if(Array.isArray(parsed.fields)){
+    const savedByKey = new Map(parsed.fields.map(f=>[f.key, f]));
+    merged.fields = base.fields.map(defaultField=>{
+      const saved = savedByKey.get(defaultField.key);
+      return saved ? Object.assign({}, defaultField, saved) : defaultField;
+    });
+    // preserve any custom fields the user may have (currently none are
+    // user-creatable, but this keeps the merge non-destructive)
+    parsed.fields.forEach(f=>{
+      if(!base.fields.some(bf=>bf.key===f.key)) merged.fields.push(f);
+    });
+  }
+  return merged;
+}
+
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return defaultState();
     const parsed = JSON.parse(raw);
-    // shallow-merge with defaults to survive schema additions
-    const base = defaultState();
-    const merged = Object.assign(base, parsed);
-    // features is a nested object — merge its keys individually so an
-    // older/partial saved 'features' object doesn't drop newly-added flags
-    merged.features = Object.assign({}, base.features, parsed.features || {});
-    return merged;
+    return mergeIntoDefaultState(parsed);
   }catch(e){
     console.warn('Failed to load saved routine, starting fresh.', e);
     return defaultState();
@@ -132,14 +152,29 @@ function applyAppearance(){
   const titleEl = document.getElementById('gridTitleInline');
   if(document.activeElement !== titleEl) titleEl.textContent = state.routineName || 'Untitled routine';
   document.title = (state.routineName || 'Personal Routine Customizer') + ' — Routine Customizer';
+  document.body.classList.toggle('click-cell-enabled', !!state.features?.clickEmptyCellToAdd);
 }
 
 function activeDays(){ return state.days.filter(d=>d.enabled); }
+
+/* Maps JS getDay() (0=Sun) to our default day-id short labels, used to
+   guess which column is "today" even if the user has renamed/reordered
+   days. We match on the 3-letter label prefix (Sat/Sun/Mon/...), which is
+   locale-stable for the default schema and a reasonable heuristic for
+   custom ones. */
+const WEEKDAY_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function todaysDayId(){
+  const now = new Date();
+  const short = WEEKDAY_SHORT[now.getDay()];
+  const match = state.days.find(d=> (d.label||'').trim().toLowerCase().startsWith(short.toLowerCase()));
+  return match ? match.id : null;
+}
 
 function renderGrid(){
   const grid = document.getElementById('routineGrid');
   const days = activeDays();
   const times = state.times;
+  const todayId = todaysDayId();
 
   grid.style.gridTemplateColumns = `var(--time-col-w) repeat(${days.length}, var(--day-col-w))`;
   grid.style.gridTemplateRows = `auto repeat(${times.length}, minmax(var(--row-h), auto))`;
@@ -154,7 +189,7 @@ function renderGrid(){
   // day headers
   days.forEach(day=>{
     const h = document.createElement('div');
-    h.className = 'g-cell g-day-head';
+    h.className = 'g-cell g-day-head' + (day.id===todayId ? ' is-today' : '');
     h.innerHTML = `${escapeHtml(day.label)}`;
     grid.appendChild(h);
   });
@@ -168,7 +203,7 @@ function renderGrid(){
 
     days.forEach(day=>{
       const slot = document.createElement('div');
-      slot.className = 'g-cell g-slot';
+      slot.className = 'g-cell g-slot' + (day.id===todayId ? ' is-today-col' : '');
       slot.dataset.dayId = day.id;
       slot.dataset.timeId = time.id;
       attachSlotDnD(slot);
@@ -178,6 +213,28 @@ function renderGrid(){
         const course = courseById(p.courseId);
         if(!course) return;
         slot.appendChild(buildCourseCard(course, p));
+      });
+
+      const addBtn = document.createElement('button');
+      addBtn.className = 'g-slot__add';
+      addBtn.type = 'button';
+      addBtn.title = 'Add a course here';
+      addBtn.setAttribute('aria-label', 'Add a course to this slot');
+      addBtn.innerHTML = '<i data-lucide="plus"></i>';
+      addBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        openCellPicker(day.id, time.id, addBtn);
+      });
+      slot.appendChild(addBtn);
+
+      // Clicking empty space in the cell (not a card, not the add button)
+      // also opens the picker — gated behind a Settings > Features toggle
+      // (off by default) since it changes what a plain click on the grid
+      // does.
+      slot.addEventListener('click', (e)=>{
+        if(!state.features?.clickEmptyCellToAdd) return;
+        if(e.target.closest('.course-card') || e.target.closest('.g-slot__add')) return;
+        openCellPicker(day.id, time.id, slot);
       });
 
       grid.appendChild(slot);
@@ -215,6 +272,7 @@ function buildCourseCard(course, placement){
   }
 
   card.innerHTML = `
+    <button class="course-card__duplicate" type="button" title="Duplicate this class" aria-label="Duplicate this class"><i data-lucide="copy-plus"></i></button>
     ${course.section && fieldByKey('section')?.enabled ? `<span class="course-card__section">${escapeHtml(course.section)}</span>` : ''}
     <div class="course-card__name">${escapeHtml(name)}</div>
     ${sub ? `<div class="course-card__sub">${escapeHtml(sub)}</div>` : ''}
@@ -237,8 +295,23 @@ function buildCourseCard(course, placement){
     card.classList.add('dragging');
   });
   card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+  card.querySelector('.course-card__duplicate').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    duplicatePlacement(placement.id);
+  });
 
   return card;
+}
+
+/* Duplicates a placed class into the same day/time cell (stacks below the
+   original, since a cell can already hold multiple course cards). */
+function duplicatePlacement(placementId){
+  const p = state.placements.find(pl=>pl.id===placementId);
+  if(!p) return;
+  state.placements.push({ id: uid('pl'), courseId: p.courseId, dayId: p.dayId, timeId: p.timeId, room: p.room||'', note: p.note||'' });
+  saveState();
+  renderGrid();
+  showToast('Class duplicated.');
 }
 
 function hexToSoft(hex){
@@ -299,7 +372,8 @@ function attachSlotDnD(slot){
     const dayId = target.dataset.dayId, timeId = target.dataset.timeId;
 
     if(payload.type === 'bank-course'){
-      state.placements.push({ id: uid('pl'), courseId: payload.courseId, dayId, timeId, room:'', note:'' });
+      const course = courseById(payload.courseId);
+      state.placements.push({ id: uid('pl'), courseId: payload.courseId, dayId, timeId, room: course?.defaultRoom || '', note:'' });
       saveState();
       renderGrid();
       showToast('Added to grid.');
@@ -308,6 +382,73 @@ function attachSlotDnD(slot){
       if(p){ p.dayId = dayId; p.timeId = timeId; saveState(); renderGrid(); }
     }
   });
+}
+
+/* =========================================================================
+   CELL COURSE PICKER (click '+' or an empty cell to choose instead of drag)
+   ========================================================================= */
+
+let cellPickerTarget = null; // { dayId, timeId }
+
+function openCellPicker(dayId, timeId, anchorEl){
+  cellPickerTarget = { dayId, timeId };
+  const picker = document.getElementById('cellPicker');
+  const list = document.getElementById('cellPickerList');
+  list.innerHTML = '';
+
+  if(state.courses.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'cell-picker__empty';
+    empty.textContent = 'No courses in your bank yet — create one below.';
+    list.appendChild(empty);
+  } else {
+    state.courses.forEach(course=>{
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'cell-picker__item';
+      item.style.borderLeftColor = course.color;
+      const sub = [course.courseCode, course.teacherName].filter(Boolean).join(' · ');
+      item.innerHTML = `
+        <span class="cell-picker__item-name">${escapeHtml(courseTitle(course))}</span>
+        ${sub ? `<span class="cell-picker__item-sub">${escapeHtml(sub)}</span>` : ''}
+      `;
+      item.addEventListener('click', ()=>{
+        addCourseToSlot(course.id, dayId, timeId);
+        closeCellPicker();
+      });
+      list.appendChild(item);
+    });
+  }
+
+  // Position near the anchor (falls back to centered if it doesn't fit)
+  picker.hidden = false;
+  positionCellPicker(picker, anchorEl);
+  if(window.lucide) lucide.createIcons();
+}
+
+function positionCellPicker(picker, anchorEl){
+  const rect = anchorEl.getBoundingClientRect();
+  const pickerW = 260, pickerH = Math.min(picker.scrollHeight || 320, 360);
+  let left = rect.left;
+  let top = rect.bottom + 6;
+  if(left + pickerW > window.innerWidth - 10) left = window.innerWidth - pickerW - 10;
+  if(top + pickerH > window.innerHeight - 10) top = rect.top - pickerH - 6;
+  if(top < 10) top = 10;
+  if(left < 10) left = 10;
+  picker.style.left = left + 'px';
+  picker.style.top = top + 'px';
+}
+
+function closeCellPicker(){
+  document.getElementById('cellPicker').hidden = true;
+  cellPickerTarget = null;
+}
+
+function openCourseEditorForCell(){
+  if(!cellPickerTarget) return;
+  const target = cellPickerTarget;
+  closeCellPicker();
+  openCourseEditor(null, target);
 }
 
 /* =========================================================================
@@ -329,7 +470,10 @@ function renderBank(){
     if(course.section && fieldByKey('section')?.enabled) metaBits.push('Sec ' + course.section);
 
     chip.innerHTML = `
-      <button class="course-chip__edit" title="Edit course" aria-label="Edit course"><i data-lucide="pencil"></i></button>
+      <div class="course-chip__actions">
+        <button class="course-chip__duplicate" title="Duplicate course" aria-label="Duplicate course"><i data-lucide="copy-plus"></i></button>
+        <button class="course-chip__edit" title="Edit course" aria-label="Edit course"><i data-lucide="pencil"></i></button>
+      </div>
       <div class="course-chip__name">${escapeHtml(courseTitle(course))}</div>
       ${course.courseCode ? `<div class="course-chip__code">${escapeHtml(course.courseCode)}</div>` : ''}
       ${metaBits.length ? `<div class="course-chip__meta"><span>${metaBits.map(escapeHtml).join(' · ')}</span></div>` : ''}
@@ -345,6 +489,10 @@ function renderBank(){
       e.stopPropagation();
       openCourseEditor(course.id);
     });
+    chip.querySelector('.course-chip__duplicate').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      duplicateCourse(course.id);
+    });
     chip.addEventListener('click', ()=> openCourseEditor(course.id));
 
     list.appendChild(chip);
@@ -352,14 +500,42 @@ function renderBank(){
   if(window.lucide) lucide.createIcons();
 }
 
+/* Duplicate a course in the bank (used by the chip's duplicate icon).
+   The copy is a plain bank entry — not yet placed on the grid — so the
+   user can drag/click it into whichever cell they want. */
+function duplicateCourse(courseId){
+  const course = courseById(courseId);
+  if(!course) return;
+  const copy = Object.assign({}, course, { id: uid('c') });
+  copy.courseName = (copy.courseName ? copy.courseName + ' (copy)' : 'Untitled course (copy)');
+  state.courses.push(copy);
+  saveState();
+  renderBank();
+  showToast('Course duplicated.');
+}
+
+/* Places a course into a specific day/time slot, using the course's
+   default room number if one is set. Shared by drag-drop, the '+' icon
+   popover, and clicking an empty cell. */
+function addCourseToSlot(courseId, dayId, timeId){
+  const course = courseById(courseId);
+  if(!course) return;
+  state.placements.push({ id: uid('pl'), courseId, dayId, timeId, room: course.defaultRoom || '', note:'' });
+  saveState();
+  renderGrid();
+  showToast('Added to grid.');
+}
+
 /* =========================================================================
    COURSE EDITOR MODAL (create / edit a course in the bank)
    ========================================================================= */
 
 let editingCourseId = null;
+let pendingPlacementTarget = null; // { dayId, timeId } — set when created via the '+' cell picker
 
-function openCourseEditor(courseId){
+function openCourseEditor(courseId, placeIntoSlot){
   editingCourseId = courseId || null;
+  pendingPlacementTarget = placeIntoSlot || null;
   const course = courseId ? courseById(courseId) : null;
   document.getElementById('courseModalTitle').innerHTML = `<i data-lucide="book-open"></i> ${course ? 'Edit course' : 'New course'}`;
   document.getElementById('btnDeleteCourse').style.display = course ? 'inline-flex' : 'none';
@@ -405,6 +581,7 @@ function openCourseEditor(courseId){
 function closeCourseEditor(){
   document.getElementById('courseOverlay').hidden = true;
   editingCourseId = null;
+  pendingPlacementTarget = null;
 }
 
 function saveCourseFromForm(){
@@ -415,17 +592,28 @@ function saveCourseFromForm(){
   const selectedSwatch = body.querySelector('.swatch.is-selected');
   const color = selectedSwatch ? selectedSwatch.dataset.hex : COURSE_PALETTE[0];
 
+  let savedCourseId;
   if(editingCourseId){
     const course = courseById(editingCourseId);
     Object.assign(course, data, { color });
+    savedCourseId = course.id;
   } else {
-    state.courses.push(Object.assign({ id: uid('c'), color }, data));
+    const newCourse = Object.assign({ id: uid('c'), color }, data);
+    state.courses.push(newCourse);
+    savedCourseId = newCourse.id;
   }
   saveState();
   renderBank();
   renderGrid();
+
+  const target = pendingPlacementTarget;
   closeCourseEditor();
-  showToast('Course saved.');
+
+  if(target){
+    addCourseToSlot(savedCourseId, target.dayId, target.timeId);
+  } else {
+    showToast('Course saved.');
+  }
 }
 
 function deleteCourseFromEditor(){
@@ -459,14 +647,17 @@ function phoneActionsHtml(rawNumber){
   `;
 }
 
+let currentDetailCourseId = null;
+
 function openCardDetail(course, placement){
   currentDetailPlacementId = placement.id;
+  currentDetailCourseId = course.id;
   document.getElementById('cardDetailTitle').textContent = courseTitle(course);
 
   const day = dayById(placement.dayId), time = timeById(placement.timeId);
   const body = document.getElementById('cardDetailBody');
 
-  const infoFields = enabledFields().filter(f=> f.key!=='courseName' && course[f.key]);
+  const infoFields = enabledFields().filter(f=> f.key!=='courseName' && f.key!=='defaultRoom' && course[f.key]);
   const iconFor = (key)=>({
     courseCode:'hash', teacherName:'user', teacherShort:'user-check', teacherMobile:'phone',
     section:'users', sectionNote:'sticky-note', crName:'shield-user', crMobile:'phone-call',
@@ -508,8 +699,33 @@ function openCardDetail(course, placement){
           <textarea id="detailNote" placeholder="e.g. Class moved this week, bring calculator...">${escapeHtml(placement.note||'')}</textarea>
         </div>
       </div>
+      <div class="detail-divider"></div>
+      <div class="detail-item">
+        <i data-lucide="palette"></i>
+        <div style="flex:1">
+          <div class="detail-label">Chip color</div>
+          <div class="color-swatches" id="detailColorSwatches" style="margin-top:6px"></div>
+        </div>
+      </div>
     </div>
   `;
+
+  const swatchWrap = document.getElementById('detailColorSwatches');
+  COURSE_PALETTE.forEach(hex=>{
+    const sw = document.createElement('div');
+    sw.className = 'swatch' + (hex.toLowerCase()===(course.color||'').toLowerCase() ? ' is-selected' : '');
+    sw.style.background = hex;
+    sw.dataset.hex = hex;
+    sw.addEventListener('click', ()=>{
+      swatchWrap.querySelectorAll('.swatch').forEach(s=>s.classList.remove('is-selected'));
+      sw.classList.add('is-selected');
+      course.color = hex;
+      saveState();
+      renderGrid();
+      renderBank();
+    });
+    swatchWrap.appendChild(sw);
+  });
 
   document.getElementById('cardDetailOverlay').hidden = false;
   if(window.lucide) lucide.createIcons();
@@ -531,6 +747,17 @@ function closeCardDetail(){
   saveCardDetailEdits();
   document.getElementById('cardDetailOverlay').hidden = true;
   currentDetailPlacementId = null;
+  currentDetailCourseId = null;
+}
+
+function editCourseFromDetail(){
+  if(!currentDetailCourseId) return;
+  const courseId = currentDetailCourseId;
+  saveCardDetailEdits();
+  document.getElementById('cardDetailOverlay').hidden = true;
+  currentDetailPlacementId = null;
+  currentDetailCourseId = null;
+  openCourseEditor(courseId);
 }
 
 function removeCurrentPlacement(){
@@ -690,6 +917,7 @@ function openSettings(){
   document.getElementById('setDensity').value = state.density;
   document.getElementById('setRightClickDelete').checked = !!state.features?.rightClickDelete;
   document.getElementById('setConfirmBeforeDelete').checked = !!state.features?.confirmBeforeDelete;
+  document.getElementById('setClickEmptyCellToAdd').checked = !!state.features?.clickEmptyCellToAdd;
   document.getElementById('settingsOverlay').hidden = false;
 }
 function closeSettings(){ document.getElementById('settingsOverlay').hidden = true; }
@@ -812,9 +1040,7 @@ function importJsonFromTextarea(){
   }
   if(!confirm('Import this routine? It will replace your current routine (copy/export a backup first if unsure).')) return;
   try{
-    const base = defaultState();
-    state = Object.assign(base, parsed);
-    state.features = Object.assign({}, base.features, parsed.features || {});
+    state = mergeIntoDefaultState(parsed);
     saveState();
     renderAll();
     closeJsonModal();
@@ -1039,6 +1265,9 @@ function wireEvents(){
   document.getElementById('setConfirmBeforeDelete').addEventListener('change', (e)=>{
     state.features.confirmBeforeDelete = e.target.checked; saveState();
   });
+  document.getElementById('setClickEmptyCellToAdd').addEventListener('change', (e)=>{
+    state.features.clickEmptyCellToAdd = e.target.checked; saveState(); applyAppearance();
+  });
 
   document.getElementById('btnClearGrid').addEventListener('click', ()=>{
     if(!confirm('Remove all courses placed on the grid? Your course bank stays intact.')) return;
@@ -1070,6 +1299,18 @@ function wireEvents(){
   document.getElementById('btnCloseCardDetail2').addEventListener('click', closeCardDetail);
   document.getElementById('cardDetailOverlay').addEventListener('click', (e)=>{ if(e.target.id==='cardDetailOverlay') closeCardDetail(); });
   document.getElementById('btnRemoveFromGrid').addEventListener('click', removeCurrentPlacement);
+  document.getElementById('btnEditCourseFromDetail').addEventListener('click', editCourseFromDetail);
+
+  // Cell course picker (the '+' icon / empty-cell click popover)
+  document.getElementById('btnCloseCellPicker').addEventListener('click', closeCellPicker);
+  document.getElementById('btnCellPickerNew').addEventListener('click', openCourseEditorForCell);
+  document.addEventListener('click', (e)=>{
+    const picker = document.getElementById('cellPicker');
+    if(picker.hidden) return;
+    if(e.target.closest('#cellPicker') || e.target.closest('.g-slot')) return;
+    closeCellPicker();
+  });
+  window.addEventListener('resize', ()=>{ if(!document.getElementById('cellPicker').hidden) closeCellPicker(); });
 
   // Export menu
   const exportMenu = document.getElementById('exportMenu');
@@ -1104,10 +1345,81 @@ function wireEvents(){
   // Escape closes topmost modal
   document.addEventListener('keydown', (e)=>{
     if(e.key !== 'Escape') return;
-    if(!document.getElementById('cardDetailOverlay').hidden) closeCardDetail();
+    if(!document.getElementById('cellPicker').hidden) closeCellPicker();
+    else if(!document.getElementById('cardDetailOverlay').hidden) closeCardDetail();
     else if(!document.getElementById('courseOverlay').hidden) closeCourseEditor();
     else if(!document.getElementById('jsonOverlay').hidden) closeJsonModal();
     else if(!document.getElementById('settingsOverlay').hidden) closeSettings();
+  });
+}
+
+/* =========================================================================
+   LIVE CLOCK — "August 23 (Sun), 2026; 12:03:03 PM"
+   ========================================================================= */
+
+function formatLiveClock(now){
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const weekdays = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const datePart = `${months[now.getMonth()]} ${now.getDate()} (${weekdays[now.getDay()]}), ${now.getFullYear()}`;
+  let h = now.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if(h === 0) h = 12;
+  const pad = (n)=> String(n).padStart(2,'0');
+  const timePart = `${h}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${ampm}`;
+  return `${datePart}; ${timePart}`;
+}
+
+let liveClockTimer = null;
+function startLiveClock(){
+  const el = document.getElementById('liveClock');
+  if(!el) return;
+  const tick = ()=>{ el.textContent = formatLiveClock(new Date()); };
+  tick();
+  clearInterval(liveClockTimer);
+  liveClockTimer = setInterval(tick, 1000);
+}
+
+/* =========================================================================
+   OFFLINE INDICATOR
+   ========================================================================= */
+
+function updateOfflineBadge(){
+  const badge = document.getElementById('offlineBadge');
+  if(!badge) return;
+  badge.hidden = navigator.onLine;
+  if(window.lucide) lucide.createIcons();
+}
+
+/* =========================================================================
+   CLICK-AND-DRAG SCROLL (grid area) — lets a mouse-down + move scroll the
+   grid, so users on desktop can pan without a trackpad/scrollbar, and so
+   an in-progress card drag is easier to steer toward off-screen cells.
+   Only engages for plain left-button presses on empty grid chrome (not on
+   cards, buttons, or draggable chips) so native HTML5 drag still works.
+   ========================================================================= */
+
+function attachClickDragScroll(container){
+  let isPanning = false;
+  let startX, startY, scrollLeft, scrollTop;
+
+  container.addEventListener('mousedown', (e)=>{
+    if(e.button !== 0) return;
+    if(e.target.closest('.course-card, .g-slot__add, button, a, input, textarea, [draggable="true"]')) return;
+    isPanning = true;
+    container.classList.add('is-panning');
+    startX = e.pageX; startY = e.pageY;
+    scrollLeft = container.scrollLeft; scrollTop = container.scrollTop;
+  });
+  window.addEventListener('mousemove', (e)=>{
+    if(!isPanning) return;
+    e.preventDefault();
+    container.scrollLeft = scrollLeft - (e.pageX - startX);
+    container.scrollTop = scrollTop - (e.pageY - startY);
+  });
+  window.addEventListener('mouseup', ()=>{
+    if(!isPanning) return;
+    isPanning = false;
+    container.classList.remove('is-panning');
   });
 }
 
@@ -1125,5 +1437,10 @@ function registerServiceWorker(){
   wireEvents();
   renderAll();
   registerServiceWorker();
+  startLiveClock();
+  updateOfflineBadge();
+  window.addEventListener('online', updateOfflineBadge);
+  window.addEventListener('offline', updateOfflineBadge);
+  attachClickDragScroll(document.getElementById('gridScroll'));
   if(window.lucide) lucide.createIcons();
 })();

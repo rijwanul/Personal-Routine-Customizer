@@ -79,6 +79,8 @@
     <div class="grid-toolbar">
       <div class="grid-toolbar__title" id="gridTitleInline" contenteditable="true" spellcheck="false">Untitled routine</div>
       <div class="grid-toolbar__spacer"></div>
+      <span class="live-clock" id="liveClock"></span>
+      <span class="offline-badge" id="offlineBadge" hidden><i data-lucide="wifi-off"></i> Offline</span>
       <span class="hint-chip"><i data-lucide="move"></i> Drag courses from the bank</span>
     </div>
     <div class="grid-scroll" id="gridScroll">
@@ -89,6 +91,16 @@
 
 <!-- Grid for clean PNG/PDF export (offscreen clone target) -->
 <div id="exportRoot" class="export-root"></div>
+
+<!-- ============ CELL COURSE PICKER (choose from bank instead of dragging) ============ -->
+<div class="cell-picker" id="cellPicker" hidden>
+  <div class="cell-picker__head">
+    <span>Choose a course</span>
+    <button class="btn btn--icon btn--sm" id="btnCloseCellPicker" aria-label="Close"><i data-lucide="x"></i></button>
+  </div>
+  <div class="cell-picker__list" id="cellPickerList"></div>
+  <button class="cell-picker__newbtn" id="btnCellPickerNew"><i data-lucide="plus"></i> New course for this slot</button>
+</div>
 
 <!-- ============ SETTINGS MODAL ============ -->
 <div class="modal-overlay" id="settingsOverlay" hidden>
@@ -158,6 +170,13 @@
         </div>
         <input type="checkbox" id="setConfirmBeforeDelete">
       </div>
+      <div class="feature-toggle-row">
+        <div class="feature-toggle-row__text">
+          <div class="feature-toggle-row__label">Click empty cell to add</div>
+          <div class="feature-toggle-row__hint">Click anywhere in an empty grid cell to pick a course, instead of only using the '+' button or dragging.</div>
+        </div>
+        <input type="checkbox" id="setClickEmptyCellToAdd">
+      </div>
     </div>
 
     <div class="tab-panel" id="panel-data">
@@ -192,7 +211,10 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="cardDetailTitle">
     <div class="modal__head">
       <h2 id="cardDetailTitle">Class details</h2>
-      <button class="btn btn--icon" id="btnCloseCardDetail" aria-label="Close"><i data-lucide="x"></i></button>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <button class="btn btn--icon" id="btnEditCourseFromDetail" title="Edit course" aria-label="Edit course"><i data-lucide="pencil"></i></button>
+        <button class="btn btn--icon" id="btnCloseCardDetail" aria-label="Close"><i data-lucide="x"></i></button>
+      </div>
     </div>
     <div class="modal__body" id="cardDetailBody"></div>
     <div class="modal__foot">
