@@ -134,7 +134,7 @@ function renderGrid(){
   const times = state.times;
 
   grid.style.gridTemplateColumns = `var(--time-col-w) repeat(${days.length}, var(--day-col-w))`;
-  grid.style.gridTemplateRows = `auto repeat(${times.length}, var(--row-h))`;
+  grid.style.gridTemplateRows = `auto repeat(${times.length}, minmax(var(--row-h), auto))`;
   grid.innerHTML = '';
 
   // corner
@@ -180,9 +180,15 @@ function renderGrid(){
 }
 
 function buildCourseCard(course, placement){
-  const card = document.createElement('button');
-  card.type = 'button';
+  // Use a <div> (not <button>) as the drag source: some Chromium-based
+  // browsers (including Edge) do not reliably initiate native HTML5 drag
+  // gestures on <button draggable> elements, because the button's built-in
+  // press/active-state handling can swallow the drag before it starts.
+  // role="button" + tabindex + keydown below preserve click/keyboard behavior.
+  const card = document.createElement('div');
   card.className = 'course-card';
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
   card.style.background = hexToSoft(course.color);
   card.style.borderColor = course.color;
   card.style.color = shadeForText(course.color);
@@ -208,6 +214,15 @@ function buildCourseCard(course, placement){
   `;
 
   card.addEventListener('click', ()=> openCardDetail(course, placement));
+  card.addEventListener('keydown', (e)=>{
+    if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openCardDetail(course, placement); }
+  });
+  card.addEventListener('contextmenu', (e)=>{
+    e.preventDefault();
+    if(confirm(`Remove ${courseTitle(course)} from this slot?`)){
+      removePlacementById(placement.id);
+    }
+  });
   card.addEventListener('dragstart', (e)=>{
     e.dataTransfer.setData('text/plain', JSON.stringify({ type:'move-placement', placementId: placement.id }));
     e.dataTransfer.effectAllowed = 'move';
@@ -242,20 +257,38 @@ function hexToRgb(hex){
 
 /* ---------- Drag & drop: dropping a course from the bank, or moving an existing card ---------- */
 function attachSlotDnD(slot){
+  // Use e.target.closest('.g-slot') throughout so the handlers still fire
+  // correctly when the drag hovers/drops over a child (e.g. an existing
+  // course-card sitting inside the slot) instead of the slot div itself.
   slot.addEventListener('dragover', (e)=>{
+    const target = e.target.closest('.g-slot');
+    if(!target) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    slot.classList.add('is-dragover');
+    // Match dropEffect to whatever effectAllowed was set at dragstart
+    // ('move' for repositioning an existing card, 'copy' for a bank course).
+    // Chromium/Edge can silently reject the drop if dropEffect doesn't fit
+    // within effectAllowed, even though dragover/hover feedback still shows.
+    e.dataTransfer.dropEffect = (e.dataTransfer.effectAllowed === 'move') ? 'move' : 'copy';
+    target.classList.add('is-dragover');
   });
-  slot.addEventListener('dragleave', ()=> slot.classList.remove('is-dragover'));
+  slot.addEventListener('dragleave', (e)=>{
+    const target = e.target.closest('.g-slot');
+    if(!target) return;
+    // Only clear the highlight once the pointer has actually left the slot
+    // (not just moved onto a child element inside it).
+    if(e.relatedTarget && target.contains(e.relatedTarget)) return;
+    target.classList.remove('is-dragover');
+  });
   slot.addEventListener('drop', (e)=>{
+    const target = e.target.closest('.g-slot');
+    if(!target) return;
     e.preventDefault();
-    slot.classList.remove('is-dragover');
+    target.classList.remove('is-dragover');
     let payload;
     try{ payload = JSON.parse(e.dataTransfer.getData('text/plain')); }catch(err){ return; }
     if(!payload) return;
 
-    const dayId = slot.dataset.dayId, timeId = slot.dataset.timeId;
+    const dayId = target.dataset.dayId, timeId = target.dataset.timeId;
 
     if(payload.type === 'bank-course'){
       state.placements.push({ id: uid('pl'), courseId: payload.courseId, dayId, timeId, room:'', note:'' });
@@ -405,6 +438,19 @@ function deleteCourseFromEditor(){
 
 let currentDetailPlacementId = null;
 
+function phoneActionsHtml(rawNumber){
+  const digits = String(rawNumber||'').replace(/[^\d+]/g,'');
+  if(!digits) return '';
+  // wa.me requires digits only, no leading +
+  const waDigits = digits.replace(/^\+/,'');
+  return `
+    <div class="detail-phone-actions">
+      <a class="btn btn--icon btn--sm" href="tel:${digits}" title="Call" aria-label="Call"><i data-lucide="phone-call"></i></a>
+      <a class="btn btn--icon btn--sm" href="https://wa.me/${waDigits}" target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="WhatsApp"><i data-lucide="message-circle"></i></a>
+    </div>
+  `;
+}
+
 function openCardDetail(course, placement){
   currentDetailPlacementId = placement.id;
   document.getElementById('cardDetailTitle').textContent = courseTitle(course);
@@ -432,10 +478,11 @@ function openCardDetail(course, placement){
       ${infoFields.map(f=>`
         <div class="detail-item">
           <i data-lucide="${iconFor(f.key)}"></i>
-          <div>
+          <div style="flex:1">
             <div class="detail-label">${escapeHtml(f.label)}</div>
             <div class="detail-value">${escapeHtml(course[f.key])}</div>
           </div>
+          ${f.type==='tel' ? phoneActionsHtml(course[f.key]) : ''}
         </div>
       `).join('')}
       <div class="detail-divider"></div>
@@ -480,11 +527,17 @@ function closeCardDetail(){
 
 function removeCurrentPlacement(){
   if(!currentDetailPlacementId) return;
-  state.placements = state.placements.filter(p=>p.id!==currentDetailPlacementId);
-  saveState();
-  renderGrid();
+  removePlacementById(currentDetailPlacementId);
   document.getElementById('cardDetailOverlay').hidden = true;
   currentDetailPlacementId = null;
+}
+
+function removePlacementById(placementId){
+  const existed = state.placements.some(p=>p.id===placementId);
+  if(!existed) return;
+  state.placements = state.placements.filter(p=>p.id!==placementId);
+  saveState();
+  renderGrid();
   showToast('Removed from grid.');
 }
 
@@ -701,6 +754,62 @@ function downloadBlob(blob, filename){
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=> URL.revokeObjectURL(url), 2000);
+}
+
+/* ---------- Import/Export — JSON copy/paste ---------- */
+function openJsonModal(){
+  const textarea = document.getElementById('jsonTextarea');
+  textarea.value = JSON.stringify(state, null, 2);
+  document.getElementById('jsonOverlay').hidden = false;
+  textarea.focus();
+  textarea.select();
+}
+
+function closeJsonModal(){
+  document.getElementById('jsonOverlay').hidden = true;
+}
+
+async function copyJsonToClipboard(){
+  const textarea = document.getElementById('jsonTextarea');
+  try{
+    await navigator.clipboard.writeText(textarea.value);
+    showToast('JSON copied to clipboard.');
+  }catch(e){
+    // Fallback for browsers/contexts without clipboard API permission
+    textarea.focus();
+    textarea.select();
+    try{
+      document.execCommand('copy');
+      showToast('JSON copied to clipboard.');
+    }catch(err){
+      showToast('Could not copy — select the text and copy manually.', 'error');
+    }
+  }
+}
+
+function importJsonFromTextarea(){
+  const textarea = document.getElementById('jsonTextarea');
+  const text = textarea.value.trim();
+  if(!text){ showToast('Paste JSON before importing.', 'error'); return; }
+  let parsed;
+  try{
+    parsed = JSON.parse(text);
+  }catch(e){
+    showToast('That is not valid JSON.', 'error');
+    return;
+  }
+  if(!confirm('Import this routine? It will replace your current routine (copy/export a backup first if unsure).')) return;
+  try{
+    const base = defaultState();
+    state = Object.assign(base, parsed);
+    saveState();
+    renderAll();
+    closeJsonModal();
+    showToast('Routine imported.');
+  }catch(e){
+    console.error(e);
+    showToast('Could not import — unexpected JSON shape.', 'error');
+  }
 }
 
 function importTxt(file){
@@ -953,6 +1062,14 @@ function wireEvents(){
   exportMenu.querySelector('[data-action="export-txt"]').addEventListener('click', ()=>{ exportMenu.hidden=true; exportTxt(); });
   exportMenu.querySelector('[data-action="export-png"]').addEventListener('click', ()=>{ exportMenu.hidden=true; exportPng(); });
   exportMenu.querySelector('[data-action="export-pdf"]').addEventListener('click', ()=>{ exportMenu.hidden=true; exportPdf(); });
+  exportMenu.querySelector('[data-action="export-json-copy"]').addEventListener('click', ()=>{ exportMenu.hidden=true; openJsonModal(); });
+
+  // JSON copy/paste modal
+  document.getElementById('btnCloseJson').addEventListener('click', closeJsonModal);
+  document.getElementById('btnCancelJson').addEventListener('click', closeJsonModal);
+  document.getElementById('jsonOverlay').addEventListener('click', (e)=>{ if(e.target.id==='jsonOverlay') closeJsonModal(); });
+  document.getElementById('btnCopyJson').addEventListener('click', copyJsonToClipboard);
+  document.getElementById('btnImportJson').addEventListener('click', importJsonFromTextarea);
 
   const importInput = document.getElementById('importFileInput');
   exportMenu.querySelector('[data-action="import-txt"]').addEventListener('click', ()=>{
@@ -968,6 +1085,7 @@ function wireEvents(){
     if(e.key !== 'Escape') return;
     if(!document.getElementById('cardDetailOverlay').hidden) closeCardDetail();
     else if(!document.getElementById('courseOverlay').hidden) closeCourseEditor();
+    else if(!document.getElementById('jsonOverlay').hidden) closeJsonModal();
     else if(!document.getElementById('settingsOverlay').hidden) closeSettings();
   });
 }

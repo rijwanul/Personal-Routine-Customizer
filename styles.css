@@ -308,6 +308,13 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   animation: modalIn 200ms cubic-bezier(.2,.8,.2,1);
 }
 .modal--wide{ max-width: 640px; }
+.json-textarea{
+  width:100%; min-height:260px; padding: 12px 14px; border-radius:9px;
+  border: 1.5px solid var(--hairline-strong); background: var(--paper); color: var(--ink);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size:12.5px; line-height:1.5; resize:vertical;
+}
+.json-textarea:focus{ border-color: var(--accent); }
 @keyframes modalIn{ from{ opacity:0; transform: translateY(10px) scale(.98);} to{opacity:1; transform:none;} }
 
 .modal__head{
@@ -402,6 +409,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .detail-item svg{ width:16px; height:16px; color: var(--accent); flex:none; margin-top:2px; }
 .detail-item .detail-label{ font-size:10.5px; color: var(--ink-faint); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
 .detail-item .detail-value{ font-size:13.5px; color: var(--ink); font-weight:500; }
+.detail-phone-actions{ display:flex; gap:6px; flex:none; align-self:center; }
+.detail-phone-actions .btn--icon{ padding:7px; }
+.detail-phone-actions .btn--icon svg{ width:16px; height:16px; }
 .detail-divider{ height:1px; background: var(--hairline); margin: 4px 0; }
 .detail-editable textarea, .detail-editable input{
   width:100%; padding:8px 10px; border-radius:8px; border:1.5px solid var(--hairline-strong);
