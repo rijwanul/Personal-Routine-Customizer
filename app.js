@@ -58,7 +58,8 @@ function defaultState(){
     features: {
       rightClickDelete: true,
       confirmBeforeDelete: true,
-      clickEmptyCellToAdd: false
+      clickEmptyCellToAdd: false,
+      bulkAddCourses: true
     }
   };
 }
@@ -180,6 +181,13 @@ function applyAppearance(){
   if(document.activeElement !== titleEl) titleEl.textContent = state.routineName || 'Untitled routine';
   document.title = (state.routineName || 'Personal Routine Customizer') + ' — Routine Customizer';
   document.body.classList.toggle('click-cell-enabled', !!state.features?.clickEmptyCellToAdd);
+  const bulkEnabled = !!state.features?.bulkAddCourses;
+  const bulkBtn = document.getElementById('btnBulkAddCourses');
+  if(bulkBtn) bulkBtn.hidden = !bulkEnabled;
+  // Both "New course" and "Bulk Courses" showing at once -> shrink to
+  // icon-only so the bank header stays uncluttered. Only one showing ->
+  // keep its label so it's clear what the button does.
+  document.getElementById('bankHead')?.classList.toggle('bank__head--compact', bulkEnabled);
 }
 
 function activeDays(){ return state.days.filter(d=>d.enabled); }
@@ -656,6 +664,139 @@ function deleteCourseFromEditor(){
 }
 
 /* =========================================================================
+   BULK ADD COURSES (Settings > Features toggle) — paste many courses at
+   once, one per line, in any mix of these formats:
+     "CSE-1121: Computer Programming I"   (code + name)
+     "CSE 1122"                            (code only)
+     "Computer Programming I"              (name only)
+   Parsed course code detection is a heuristic (short, contains a digit,
+   at most one space/dash separator) since there's no strict standard for
+   course code formats across institutions.
+   ========================================================================= */
+
+function looksLikeCourseCode(s){
+  if(!s || s.length > 15) return false;
+  if(!/\d/.test(s)) return false; // course codes always carry a number
+  // letters + digits with at most one separator (a single space or dash),
+  // e.g. "CSE-1121", "CSE 1122", "101", "CS5"
+  return /^[A-Za-z]+[\s-][A-Za-z0-9]+$/.test(s) || /^[A-Za-z]*\d[A-Za-z0-9]*$/.test(s);
+}
+
+/* Parses one pasted line into {courseCode, courseName}. Returns null for
+   blank lines. Strips common list bullets/numbering so pasted lists from
+   docs/PDFs (e.g. "1) CSE-1121: ...") still parse cleanly. */
+function parseBulkCourseLine(rawLine){
+  let line = rawLine.trim();
+  if(!line) return null;
+  line = line.replace(/^[-*•]\s+/, '').replace(/^\d+[.)]\s+/, '').trim();
+  if(!line) return null;
+
+  const colonIdx = line.indexOf(':');
+  if(colonIdx > -1){
+    const left = line.slice(0, colonIdx).trim();
+    const right = line.slice(colonIdx + 1).trim();
+    if(left && right && looksLikeCourseCode(left)){
+      return { courseCode: left, courseName: right };
+    }
+    // Colon present but the left side doesn't look like a code (e.g. a
+    // sentence) — treat the whole line as a course name instead.
+    return { courseCode: '', courseName: line };
+  }
+
+  if(looksLikeCourseCode(line)){
+    return { courseCode: line, courseName: '' };
+  }
+  return { courseCode: '', courseName: line };
+}
+
+let bulkAddParsedRows = []; // [{ id, courseCode, courseName, included }]
+
+function openBulkAddModal(){
+  document.getElementById('bulkAddTextarea').value = '';
+  bulkAddParsedRows = [];
+  renderBulkAddPreview();
+  document.getElementById('bulkAddOverlay').hidden = false;
+  document.getElementById('bulkAddTextarea').focus();
+  if(window.lucide) lucide.createIcons();
+}
+
+function closeBulkAddModal(){
+  document.getElementById('bulkAddOverlay').hidden = true;
+  bulkAddParsedRows = [];
+}
+
+function reparseBulkAddTextarea(){
+  const text = document.getElementById('bulkAddTextarea').value;
+  bulkAddParsedRows = text.split(/\r?\n/)
+    .map(parseBulkCourseLine)
+    .filter(Boolean)
+    .map(row=>({ id: uid('bulk'), courseCode: row.courseCode, courseName: row.courseName, included: true }));
+  renderBulkAddPreview();
+}
+
+function renderBulkAddPreview(){
+  const head = document.getElementById('bulkAddPreviewHead');
+  const countEl = document.getElementById('bulkAddPreviewCount');
+  const list = document.getElementById('bulkAddPreview');
+  const confirmBtn = document.getElementById('btnConfirmBulkAdd');
+  list.innerHTML = '';
+
+  if(bulkAddParsedRows.length === 0){
+    head.hidden = true;
+    confirmBtn.disabled = true;
+    return;
+  }
+  head.hidden = false;
+
+  bulkAddParsedRows.forEach(row=>{
+    const unmatched = !row.courseCode && !row.courseName;
+    const el = document.createElement('div');
+    el.className = 'bulk-add__row' + (unmatched ? ' is-unmatched' : '');
+    el.innerHTML = `
+      <input type="checkbox" ${row.included ? 'checked' : ''} data-role="include">
+      <div class="bulk-add__row-fields">
+        <input type="text" class="bulk-add__row-code" data-role="code" value="${escapeHtml(row.courseCode)}" placeholder="Code">
+        <input type="text" class="bulk-add__row-name" data-role="name" value="${escapeHtml(row.courseName)}" placeholder="Course name">
+      </div>
+    `;
+    el.querySelector('[data-role="include"]').addEventListener('change', (e)=>{
+      row.included = e.target.checked;
+      updateBulkAddConfirmState();
+    });
+    el.querySelector('[data-role="code"]').addEventListener('input', (e)=>{ row.courseCode = e.target.value; });
+    el.querySelector('[data-role="name"]').addEventListener('input', (e)=>{ row.courseName = e.target.value; });
+    list.appendChild(el);
+  });
+
+  updateBulkAddConfirmState();
+}
+
+function updateBulkAddConfirmState(){
+  const included = bulkAddParsedRows.filter(r=>r.included && (r.courseCode || r.courseName));
+  const countEl = document.getElementById('bulkAddPreviewCount');
+  countEl.textContent = `${included.length} of ${bulkAddParsedRows.length} course${bulkAddParsedRows.length===1?'':'s'} will be added`;
+  document.getElementById('btnConfirmBulkAdd').disabled = included.length === 0;
+}
+
+function confirmBulkAdd(){
+  const rows = bulkAddParsedRows.filter(r=>r.included && (r.courseCode || r.courseName));
+  if(rows.length === 0) return;
+  rows.forEach(row=>{
+    const color = COURSE_PALETTE[state.courses.length % COURSE_PALETTE.length];
+    state.courses.push({
+      id: uid('c'),
+      color,
+      courseName: row.courseName || '',
+      courseCode: row.courseCode || ''
+    });
+  });
+  saveState();
+  renderBank();
+  closeBulkAddModal();
+  showToast(`Added ${rows.length} course${rows.length===1?'':'s'} to the bank.`);
+}
+
+/* =========================================================================
    CARD DETAIL MODAL (click a placed card: view details, edit room/note)
    ========================================================================= */
 
@@ -945,6 +1086,7 @@ function openSettings(){
   document.getElementById('setRightClickDelete').checked = !!state.features?.rightClickDelete;
   document.getElementById('setConfirmBeforeDelete').checked = !!state.features?.confirmBeforeDelete;
   document.getElementById('setClickEmptyCellToAdd').checked = !!state.features?.clickEmptyCellToAdd;
+  document.getElementById('setBulkAddCourses').checked = !!state.features?.bulkAddCourses;
   document.getElementById('settingsOverlay').hidden = false;
 }
 function closeSettings(){ document.getElementById('settingsOverlay').hidden = true; }
@@ -1295,6 +1437,9 @@ function wireEvents(){
   document.getElementById('setClickEmptyCellToAdd').addEventListener('change', (e)=>{
     state.features.clickEmptyCellToAdd = e.target.checked; saveState(); applyAppearance();
   });
+  document.getElementById('setBulkAddCourses').addEventListener('change', (e)=>{
+    state.features.bulkAddCourses = e.target.checked; saveState(); applyAppearance();
+  });
 
   document.getElementById('btnClearGrid').addEventListener('click', ()=>{
     if(!confirm('Remove all courses placed on the grid? Your course bank stays intact.')) return;
@@ -1320,6 +1465,24 @@ function wireEvents(){
   document.getElementById('courseOverlay').addEventListener('click', (e)=>{ if(e.target.id==='courseOverlay') closeCourseEditor(); });
   document.getElementById('btnSaveCourse').addEventListener('click', saveCourseFromForm);
   document.getElementById('btnDeleteCourse').addEventListener('click', deleteCourseFromEditor);
+
+  // Bulk add courses modal (Settings > Features toggle controls button visibility)
+  document.getElementById('btnBulkAddCourses').addEventListener('click', openBulkAddModal);
+  document.getElementById('btnCloseBulkAdd').addEventListener('click', closeBulkAddModal);
+  document.getElementById('btnCancelBulkAdd').addEventListener('click', closeBulkAddModal);
+  document.getElementById('bulkAddOverlay').addEventListener('click', (e)=>{ if(e.target.id==='bulkAddOverlay') closeBulkAddModal(); });
+  document.getElementById('btnConfirmBulkAdd').addEventListener('click', confirmBulkAdd);
+  let bulkAddDebounce = null;
+  document.getElementById('bulkAddTextarea').addEventListener('input', ()=>{
+    clearTimeout(bulkAddDebounce);
+    bulkAddDebounce = setTimeout(reparseBulkAddTextarea, 200);
+  });
+  document.getElementById('btnBulkAddSelectAll').addEventListener('click', ()=>{
+    bulkAddParsedRows.forEach(r=> r.included = true); renderBulkAddPreview();
+  });
+  document.getElementById('btnBulkAddSelectNone').addEventListener('click', ()=>{
+    bulkAddParsedRows.forEach(r=> r.included = false); renderBulkAddPreview();
+  });
 
   // Card detail modal
   document.getElementById('btnCloseCardDetail').addEventListener('click', closeCardDetail);
@@ -1375,6 +1538,7 @@ function wireEvents(){
     if(!document.getElementById('cellPicker').hidden) closeCellPicker();
     else if(!document.getElementById('cardDetailOverlay').hidden) closeCardDetail();
     else if(!document.getElementById('courseOverlay').hidden) closeCourseEditor();
+    else if(!document.getElementById('bulkAddOverlay').hidden) closeBulkAddModal();
     else if(!document.getElementById('jsonOverlay').hidden) closeJsonModal();
     else if(!document.getElementById('settingsOverlay').hidden) closeSettings();
   });

@@ -70,9 +70,10 @@
 <div class="app">
   <!-- ============ COURSE BANK (drawer) ============ -->
   <aside class="bank" id="bankPanel">
-    <div class="bank__head">
+    <div class="bank__head" id="bankHead">
       <h2>Course bank</h2>
-      <button class="btn btn--sm btn--accent" id="btnAddCourse"><i data-lucide="plus"></i> New course</button>
+      <button class="btn btn--sm btn--accent" id="btnAddCourse" title="New course"><i data-lucide="plus"></i><span class="btn-label"> New course</span></button>
+      <button class="btn btn--sm" id="btnBulkAddCourses" title="Bulk Courses" hidden><i data-lucide="list-plus"></i><span class="btn-label"> Bulk Courses</span></button>
     </div>
     <p class="bank__hint">Drag a card onto the grid. Click one to edit it.</p>
     <div class="bank__list" id="bankList"></div>
@@ -181,6 +182,13 @@
         </div>
         <input type="checkbox" id="setClickEmptyCellToAdd">
       </div>
+      <div class="feature-toggle-row">
+        <div class="feature-toggle-row__text">
+          <div class="feature-toggle-row__label">Bulk add courses</div>
+          <div class="feature-toggle-row__hint">Show a "+ Bulk Courses" option in the course bank to paste in many courses at once.</div>
+        </div>
+        <input type="checkbox" id="setBulkAddCourses">
+      </div>
     </div>
 
     <div class="tab-panel" id="panel-data">
@@ -245,6 +253,34 @@
       <div class="modal__spacer"></div>
       <button class="btn" id="btnCancelJson">Cancel</button>
       <button class="btn btn--accent" id="btnImportJson"><i data-lucide="upload"></i> Import from text</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ BULK ADD COURSES MODAL ============ -->
+<div class="modal-overlay" id="bulkAddOverlay" hidden>
+  <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="bulkAddModalTitle">
+    <div class="modal__head">
+      <h2 id="bulkAddModalTitle"><i data-lucide="list-plus"></i> Bulk add courses</h2>
+      <button class="btn btn--icon" id="btnCloseBulkAdd" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body">
+      <p class="bank__hint" style="margin-top:0">
+        Paste one course per line. Any of these work, and you can mix them:<br>
+        <code>CSE-1121: Computer Programming I</code> · <code>CSE 1122</code> · <code>Computer Programming I Lab</code>
+      </p>
+      <textarea id="bulkAddTextarea" class="json-textarea" style="min-height:140px" spellcheck="false" placeholder="CSE-1121: Computer Programming I&#10;CSE 1122: Computer Programming I Lab&#10;..."></textarea>
+      <div class="bulk-add__preview-head" id="bulkAddPreviewHead" hidden>
+        <span id="bulkAddPreviewCount"></span>
+        <button class="btn btn--sm" id="btnBulkAddSelectAll" type="button">Select all</button>
+        <button class="btn btn--sm" id="btnBulkAddSelectNone" type="button">Select none</button>
+      </div>
+      <div class="bulk-add__preview" id="bulkAddPreview"></div>
+    </div>
+    <div class="modal__foot">
+      <div class="modal__spacer"></div>
+      <button class="btn" id="btnCancelBulkAdd">Cancel</button>
+      <button class="btn btn--accent" id="btnConfirmBulkAdd" disabled><i data-lucide="check"></i> Add courses</button>
     </div>
   </div>
 </div>

@@ -154,8 +154,17 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   transition: margin-left var(--transition), transform var(--transition);
 }
 .bank.is-collapsed{ margin-left:-300px; }
-.bank__head{ display:flex; align-items:center; justify-content:space-between; padding:16px 16px 6px; }
+.bank__head{ display:flex; align-items:center; padding:16px 16px 6px; gap:8px; }
+.bank__head h2{ flex:1; }
 .bank__head h2{ font-size:14.5px; }
+/* When both "New course" and "Bulk Courses" are available at once, shrink
+   both to icon-only so the header doesn't get crowded with two full-text
+   buttons. With only one of them showing, its label stays visible. */
+.bank__head--compact .btn-label{ display:none; }
+.bank__head--compact #btnAddCourse,
+.bank__head--compact #btnBulkAddCourses{ padding:9px; border-radius:10px; }
+.bank__head--compact #btnAddCourse svg,
+.bank__head--compact #btnBulkAddCourses svg{ width:17px; height:17px; }
 .bank__hint{ font-size:12px; color:var(--ink-faint); margin:2px 16px 10px; }
 .bank__list{ flex:1; overflow-y:auto; padding: 4px 14px 20px; display:flex; flex-direction:column; gap:10px; }
 .bank__list:empty::after{
@@ -387,6 +396,29 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 }
 .json-textarea:focus{ border-color: var(--accent); }
 @keyframes modalIn{ from{ opacity:0; transform: translateY(10px) scale(.98);} to{opacity:1; transform:none;} }
+
+/* Bulk add courses — parsed preview list */
+.bulk-add__preview-head{
+  display:flex; align-items:center; gap:10px; margin-top:14px; margin-bottom:8px;
+  font-size:12.5px; font-weight:600; color: var(--ink-soft);
+}
+.bulk-add__preview-head span{ flex:1; }
+.bulk-add__preview{ display:flex; flex-direction:column; gap:6px; max-height:280px; overflow-y:auto; }
+.bulk-add__row{
+  display:flex; align-items:center; gap:10px;
+  background: var(--paper); border:1.5px solid var(--hairline-strong); border-radius:9px; padding:8px 10px;
+}
+.bulk-add__row input[type="checkbox"]{ width:16px; height:16px; accent-color: var(--accent); flex:none; }
+.bulk-add__row-fields{ flex:1; display:flex; gap:8px; min-width:0; }
+.bulk-add__row input[type="text"]{
+  border:none; background:none; font-family:inherit; color:var(--ink); font-size:13px; padding:4px 2px;
+}
+.bulk-add__row input[type="text"]:focus{ outline:none; background: var(--accent-soft); border-radius:5px; }
+.bulk-add__row-code{ flex: 0 0 130px; font-weight:700; }
+.bulk-add__row-name{ flex:1; min-width:0; }
+.bulk-add__row.is-unmatched{ border-color: #F3CFC4; background: var(--rust-soft); }
+.bulk-add__row-warn{ flex:none; color: var(--rust); }
+.bulk-add__row-warn svg{ width:14px; height:14px; display:block; }
 
 .modal__head{
   display:flex; align-items:center; justify-content:space-between;
