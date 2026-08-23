@@ -453,6 +453,17 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 .spin{ animation: spin 900ms linear infinite; }
 @keyframes spin{ to{ transform: rotate(360deg); } }
 
+/* Cloud sync status badge (only shown while signed in) */
+.sync-badge{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:34px; height:34px; border-radius:10px; flex:none;
+  color: var(--ink-faint);
+}
+.sync-badge svg{ width:17px; height:17px; }
+.sync-badge[data-state="saved"]{ color: var(--sage); }
+.sync-badge[data-state="saving"]{ color: var(--accent); }
+.sync-badge[data-state="error"]{ color: var(--rust); }
+
 /* Routine conflict choice (shown once, right after login) */
 .conflict-choices{ display:flex; flex-direction:column; gap:10px; margin-top:14px; }
 .conflict-choice{
@@ -592,7 +603,7 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 }
 @media (max-width: 520px){
   .topbar{ padding: 0 12px; }
-  .brand-text h1{ font-size:14px; }
+  .brand-text{ display:none; }
   .grid-toolbar{ padding: 10px 12px; }
   .grid-scroll{ padding: 12px 12px 30px; }
   .modal__body, .modal__head, .modal__foot{ padding-left:14px; padding-right:14px; }

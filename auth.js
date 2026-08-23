@@ -207,6 +207,31 @@ let cloudSyncActive = false;
 let cloudUid = null;
 let cloudSaveTimer = null;
 
+/* ---- Sync status badge (visible only while signed in) ---- */
+function syncBadgeEl() { return document.getElementById("syncBadge"); }
+
+const SYNC_ICONS = {
+  saved: '<i data-lucide="cloud-check"></i>',
+  saving: '<i data-lucide="loader-2" class="spin"></i>',
+  error: '<i data-lucide="cloud-alert"></i>'
+};
+const SYNC_TITLES = {
+  saved: "Synced to cloud",
+  saving: "Saving to cloud…",
+  error: navigator.onLine ? "Could not sync to cloud" : "Offline — not synced to cloud"
+};
+
+function setSyncBadge(state) {
+  const el = syncBadgeEl();
+  if (!el) return;
+  if (!state) { el.hidden = true; return; }
+  el.hidden = false;
+  el.dataset.state = state;
+  el.title = state === "error" ? (navigator.onLine ? SYNC_TITLES.error : "Offline — not synced to cloud") : SYNC_TITLES[state];
+  el.innerHTML = SYNC_ICONS[state];
+  if (window.lucide) lucide.createIcons();
+}
+
 /** Good enough to tell "nothing meaningful to reconcile" apart from "these
     differ" — used only to skip showing the conflict prompt when cloud and
     local are already identical. */
@@ -222,9 +247,16 @@ async function fetchCloudRoutine(uid) {
 }
 
 async function pushRoutineToCloud(uid, state) {
+  setSyncBadge("saving");
   const { db, fsMod } = await loadFirebase();
   const ref = fsMod.doc(db, "routines", uid);
-  await fsMod.setDoc(ref, { state, updatedAt: fsMod.serverTimestamp() });
+  try {
+    await fsMod.setDoc(ref, { state, updatedAt: fsMod.serverTimestamp() });
+    setSyncBadge("saved");
+  } catch (e) {
+    setSyncBadge("error");
+    throw e;
+  }
 }
 
 /** Starts mirroring every local save up to Firestore for this uid.
@@ -233,15 +265,19 @@ async function pushRoutineToCloud(uid, state) {
 function startCloudSync(uid) {
   cloudSyncActive = true;
   cloudUid = uid;
+  setSyncBadge("saved"); // assume in sync the moment we take over; the next real save will re-confirm
   window.__onRoutineStateSaved = (state) => {
     if (!cloudSyncActive) return;
     clearTimeout(cloudSaveTimer);
+    setSyncBadge("saving");
     cloudSaveTimer = setTimeout(() => {
       pushRoutineToCloud(cloudUid, state).catch(e => {
         console.warn("Cloud sync failed:", e);
       });
     }, 400);
   };
+  window.addEventListener("online", () => { if (cloudSyncActive) setSyncBadge("saved"); });
+  window.addEventListener("offline", () => { if (cloudSyncActive) setSyncBadge("error"); });
 }
 
 function stopCloudSync() {
@@ -249,6 +285,7 @@ function stopCloudSync() {
   cloudUid = null;
   clearTimeout(cloudSaveTimer);
   if (window.__onRoutineStateSaved) delete window.__onRoutineStateSaved;
+  setSyncBadge(null);
 }
 
 /** Called right after a successful login/registration. Decides whether we

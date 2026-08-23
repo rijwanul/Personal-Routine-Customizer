@@ -39,6 +39,7 @@
   </div>
 
   <div class="topbar__actions">
+    <span class="sync-badge" id="syncBadge" hidden></span>
     <button class="btn btn--icon" id="btnAccount" title="Account" aria-label="Account" hidden>
       <i data-lucide="user"></i>
     </button>
@@ -286,11 +287,11 @@
         <div class="conflict-choices">
           <button class="btn btn--accent conflict-choice" id="btnKeepCloud" type="button">
             <i data-lucide="cloud-download"></i>
-            <span>Load my saved routine<br><small>Replaces what's on this device</small></span>
+            <span>Load saved routine from cloud<br><small>Replaces what's on this device</small></span>
           </button>
           <button class="btn conflict-choice" id="btnKeepLocal" type="button">
             <i data-lucide="laptop"></i>
-            <span>Keep this device's routine<br><small>Replaces what's saved to this account</small></span>
+            <span>Keep this device's routine<br><small>Replaces what's saved to the cloud account</small></span>
           </button>
         </div>
       </div>

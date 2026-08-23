@@ -1378,6 +1378,29 @@ function wireEvents(){
     else if(!document.getElementById('jsonOverlay').hidden) closeJsonModal();
     else if(!document.getElementById('settingsOverlay').hidden) closeSettings();
   });
+
+  // Enter submits the primary action of whichever modal is open — mirrors
+  // native form behavior. Skipped inside a <textarea> (where Enter should
+  // insert a newline) and while a <select> is focused (native browser
+  // handling already covers Enter there). accountOverlay is excluded since
+  // auth.js wires its own Enter handling (it needs to disable the button and
+  // manage its own loading state around the async login/register call).
+  const ENTER_SUBMIT_MAP = [
+    { overlay: 'courseOverlay', button: 'btnSaveCourse' },
+    { overlay: 'jsonOverlay',   button: 'btnImportJson' },
+  ];
+  document.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Enter') return;
+    if(e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    for(const {overlay, button} of ENTER_SUBMIT_MAP){
+      const overlayEl = document.getElementById(overlay);
+      if(overlayEl && !overlayEl.hidden && overlayEl.contains(e.target)){
+        e.preventDefault();
+        document.getElementById(button)?.click();
+        return;
+      }
+    }
+  });
 }
 
 /* =========================================================================
