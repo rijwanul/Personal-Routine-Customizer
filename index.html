@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Personal Routine Customizer</title>
+<meta name="description" content="Build, drag, and rearrange your class routine — offline, private, yours.">
+<meta name="theme-color" content="#4C5FD5">
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<!-- Favicon (inline SVG data URI so no extra file is required) -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%234C5FD5'/%3E%3Crect x='22' y='30' width='56' height='44' rx='6' fill='%23FAF8F4'/%3E%3Crect x='22' y='30' width='56' height='14' rx='6' fill='%23D9A441'/%3E%3Cline x1='34' y1='24' x2='34' y2='36' stroke='%231F2937' stroke-width='5' stroke-linecap='round'/%3E%3Cline x1='66' y1='24' x2='66' y2='36' stroke='%231F2937' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=Noto+Serif+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ TOP BAR ============ -->
+<header class="topbar">
+  <div class="topbar__brand">
+    <div class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="var(--accent)"/><rect x="22" y="30" width="56" height="44" rx="6" fill="var(--paper)"/><rect x="22" y="30" width="56" height="14" rx="6" fill="var(--amber)"/><line x1="34" y1="24" x2="34" y2="36" stroke="var(--ink)" stroke-width="5" stroke-linecap="round"/><line x1="66" y1="24" x2="66" y2="36" stroke="var(--ink)" stroke-width="5" stroke-linecap="round"/></svg>
+    </div>
+    <div class="brand-text">
+      <h1>Routine Customizer</h1>
+      <p id="routineSubtitle">Untitled routine</p>
+    </div>
+  </div>
+
+  <div class="topbar__actions">
+    <button class="btn btn--icon" id="btnBank" title="Course bank" aria-label="Toggle course bank">
+      <i data-lucide="layout-list"></i>
+    </button>
+    <button class="btn btn--icon" id="btnSettings" title="Settings" aria-label="Open settings">
+      <i data-lucide="settings-2"></i>
+    </button>
+    <div class="menu-wrap">
+      <button class="btn btn--icon" id="btnExport" title="Import / Export" aria-label="Import or export">
+        <i data-lucide="download"></i>
+      </button>
+      <div class="menu" id="exportMenu" hidden>
+        <button data-action="export-txt"><i data-lucide="file-text"></i> Export .txt</button>
+        <button data-action="import-txt"><i data-lucide="upload"></i> Import .txt</button>
+        <div class="menu__divider"></div>
+        <button data-action="export-png"><i data-lucide="image"></i> Export PNG</button>
+        <button data-action="export-pdf"><i data-lucide="file-down"></i> Export PDF</button>
+      </div>
+    </div>
+    <input type="file" id="importFileInput" accept=".txt" hidden>
+  </div>
+</header>
+
+<div class="app">
+  <!-- ============ COURSE BANK (drawer) ============ -->
+  <aside class="bank" id="bankPanel">
+    <div class="bank__head">
+      <h2>Course bank</h2>
+      <button class="btn btn--sm btn--accent" id="btnAddCourse"><i data-lucide="plus"></i> New course</button>
+    </div>
+    <p class="bank__hint">Drag a card onto the grid. Click one to edit it.</p>
+    <div class="bank__list" id="bankList"></div>
+  </aside>
+
+  <!-- ============ ROUTINE GRID ============ -->
+  <main class="grid-wrap">
+    <div class="grid-toolbar">
+      <div class="grid-toolbar__title" id="gridTitleInline" contenteditable="true" spellcheck="false">Untitled routine</div>
+      <div class="grid-toolbar__spacer"></div>
+      <span class="hint-chip"><i data-lucide="move"></i> Drag courses from the bank</span>
+    </div>
+    <div class="grid-scroll" id="gridScroll">
+      <div class="routine-grid" id="routineGrid"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Grid for clean PNG/PDF export (offscreen clone target) -->
+<div id="exportRoot" class="export-root"></div>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div class="modal-overlay" id="settingsOverlay" hidden>
+  <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal__head">
+      <h2 id="settingsTitle"><i data-lucide="settings-2"></i> Settings</h2>
+      <button class="btn btn--icon" id="btnCloseSettings" aria-label="Close settings"><i data-lucide="x"></i></button>
+    </div>
+    <div class="tabs">
+      <button class="tab is-active" data-tab="days">Days</button>
+      <button class="tab" data-tab="times">Time slots</button>
+      <button class="tab" data-tab="fields">Course fields</button>
+      <button class="tab" data-tab="appearance">Appearance</button>
+      <button class="tab" data-tab="data">Data</button>
+    </div>
+
+    <div class="tab-panel is-active" id="panel-days">
+      <p class="panel-desc">Choose which days appear as columns, and their order.</p>
+      <div class="day-editor" id="dayEditor"></div>
+      <button class="btn btn--sm" id="btnAddDay"><i data-lucide="plus"></i> Add day</button>
+    </div>
+
+    <div class="tab-panel" id="panel-times">
+      <p class="panel-desc">Add, edit, reorder, or remove time slots. Times are shown as typed (e.g. 10:40am - 11:30am).</p>
+      <div class="time-editor" id="timeEditor"></div>
+      <button class="btn btn--sm" id="btnAddTime"><i data-lucide="plus"></i> Add time slot</button>
+    </div>
+
+    <div class="tab-panel" id="panel-fields">
+      <p class="panel-desc">Turn course fields on or off, and relabel them. All fields are optional when filling in a course.</p>
+      <div class="field-editor" id="fieldEditor"></div>
+    </div>
+
+    <div class="tab-panel" id="panel-appearance">
+      <p class="panel-desc">Personalize the look of your routine.</p>
+      <div class="field-row">
+        <label for="setRoutineName">Routine name</label>
+        <input type="text" id="setRoutineName" placeholder="e.g. 7th Semester — CSE">
+      </div>
+      <div class="field-row">
+        <label for="setAccentColor">Accent color</label>
+        <input type="color" id="setAccentColor" value="#4C5FD5">
+      </div>
+      <div class="field-row">
+        <label for="setDensity">Grid density</label>
+        <select id="setDensity">
+          <option value="comfortable">Comfortable</option>
+          <option value="compact">Compact</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel-data">
+      <p class="panel-desc">Your routine is saved automatically in this browser (offline-capable). Use export to back it up or move it to another device.</p>
+      <div class="data-actions">
+        <button class="btn" id="btnClearGrid"><i data-lucide="eraser"></i> Clear grid placements</button>
+        <button class="btn btn--danger" id="btnResetAll"><i data-lucide="trash-2"></i> Reset everything</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ COURSE EDITOR MODAL (bank card create/edit) ============ -->
+<div class="modal-overlay" id="courseOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="courseModalTitle">
+    <div class="modal__head">
+      <h2 id="courseModalTitle"><i data-lucide="book-open"></i> Course</h2>
+      <button class="btn btn--icon" id="btnCloseCourse" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body" id="courseFormBody"></div>
+    <div class="modal__foot">
+      <button class="btn btn--danger" id="btnDeleteCourse"><i data-lucide="trash-2"></i> Delete</button>
+      <div class="modal__spacer"></div>
+      <button class="btn" id="btnCancelCourse">Cancel</button>
+      <button class="btn btn--accent" id="btnSaveCourse"><i data-lucide="check"></i> Save course</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CELL CARD DETAIL MODAL (flip card: room/note + full details) ============ -->
+<div class="modal-overlay" id="cardDetailOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="cardDetailTitle">
+    <div class="modal__head">
+      <h2 id="cardDetailTitle">Class details</h2>
+      <button class="btn btn--icon" id="btnCloseCardDetail" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body" id="cardDetailBody"></div>
+    <div class="modal__foot">
+      <button class="btn btn--danger" id="btnRemoveFromGrid"><i data-lucide="x-circle"></i> Remove from grid</button>
+      <div class="modal__spacer"></div>
+      <button class="btn btn--accent" id="btnCloseCardDetail2">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
