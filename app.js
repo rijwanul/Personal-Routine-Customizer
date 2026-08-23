@@ -53,7 +53,11 @@ function defaultState(){
     times: JSON.parse(JSON.stringify(DEFAULT_TIMES)),
     fields: JSON.parse(JSON.stringify(DEFAULT_FIELDS)),
     courses: [],        // {id, color, [fieldKey]: value, ...}
-    placements: []       // {id, courseId, dayId, timeId, room, note}
+    placements: [],      // {id, courseId, dayId, timeId, room, note}
+    features: {
+      rightClickDelete: true,
+      confirmBeforeDelete: true
+    }
   };
 }
 
@@ -67,7 +71,11 @@ function loadState(){
     const parsed = JSON.parse(raw);
     // shallow-merge with defaults to survive schema additions
     const base = defaultState();
-    return Object.assign(base, parsed);
+    const merged = Object.assign(base, parsed);
+    // features is a nested object — merge its keys individually so an
+    // older/partial saved 'features' object doesn't drop newly-added flags
+    merged.features = Object.assign({}, base.features, parsed.features || {});
+    return merged;
   }catch(e){
     console.warn('Failed to load saved routine, starting fresh.', e);
     return defaultState();
@@ -219,9 +227,9 @@ function buildCourseCard(course, placement){
   });
   card.addEventListener('contextmenu', (e)=>{
     e.preventDefault();
-    if(confirm(`Remove ${courseTitle(course)} from this slot?`)){
-      removePlacementById(placement.id);
-    }
+    if(!state.features?.rightClickDelete) return;
+    if(state.features?.confirmBeforeDelete && !confirm(`Remove ${courseTitle(course)} from this slot?`)) return;
+    removePlacementById(placement.id);
   });
   card.addEventListener('dragstart', (e)=>{
     e.dataTransfer.setData('text/plain', JSON.stringify({ type:'move-placement', placementId: placement.id }));
@@ -680,6 +688,8 @@ function openSettings(){
   document.getElementById('setRoutineName').value = state.routineName;
   document.getElementById('setAccentColor').value = state.accent;
   document.getElementById('setDensity').value = state.density;
+  document.getElementById('setRightClickDelete').checked = !!state.features?.rightClickDelete;
+  document.getElementById('setConfirmBeforeDelete').checked = !!state.features?.confirmBeforeDelete;
   document.getElementById('settingsOverlay').hidden = false;
 }
 function closeSettings(){ document.getElementById('settingsOverlay').hidden = true; }
@@ -702,6 +712,8 @@ function exportTxt(){
   lines.push('routineName=' + tsvEscape(state.routineName));
   lines.push('accent=' + state.accent);
   lines.push('density=' + state.density);
+  lines.push('rightClickDelete=' + !!state.features?.rightClickDelete);
+  lines.push('confirmBeforeDelete=' + !!state.features?.confirmBeforeDelete);
   lines.push('');
 
   lines.push('[DAYS]');
@@ -802,6 +814,7 @@ function importJsonFromTextarea(){
   try{
     const base = defaultState();
     state = Object.assign(base, parsed);
+    state.features = Object.assign({}, base.features, parsed.features || {});
     saveState();
     renderAll();
     closeJsonModal();
@@ -852,6 +865,8 @@ function parseTxtExport(text){
       if(key==='routineName') s.routineName = tsvUnescape(val);
       else if(key==='accent') s.accent = val;
       else if(key==='density') s.density = val;
+      else if(key==='rightClickDelete') s.features.rightClickDelete = val === 'true';
+      else if(key==='confirmBeforeDelete') s.features.confirmBeforeDelete = val === 'true';
       continue;
     }
 
@@ -1017,6 +1032,12 @@ function wireEvents(){
   });
   document.getElementById('setDensity').addEventListener('change', (e)=>{
     state.density = e.target.value; saveState(); applyAppearance();
+  });
+  document.getElementById('setRightClickDelete').addEventListener('change', (e)=>{
+    state.features.rightClickDelete = e.target.checked; saveState();
+  });
+  document.getElementById('setConfirmBeforeDelete').addEventListener('change', (e)=>{
+    state.features.confirmBeforeDelete = e.target.checked; saveState();
   });
 
   document.getElementById('btnClearGrid').addEventListener('click', ()=>{

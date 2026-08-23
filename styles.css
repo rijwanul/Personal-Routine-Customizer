@@ -401,6 +401,17 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .field-toggle-row input[type="text"]:focus{ outline:none; }
 .field-toggle-row .field-key{ font-size:10.5px; color: var(--ink-faint); width:120px; flex:none; }
 
+/* Features tab (settings) */
+.feature-toggle-row{
+  display:flex; align-items:center; gap:14px;
+  background: var(--paper); border:1.5px solid var(--hairline-strong); border-radius:10px; padding: 12px 14px;
+  margin-bottom:8px;
+}
+.feature-toggle-row__text{ flex:1; }
+.feature-toggle-row__label{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.feature-toggle-row__hint{ font-size:11.5px; color:var(--ink-faint); margin-top:2px; line-height:1.4; }
+.feature-toggle-row input[type="checkbox"]{ width:19px; height:19px; accent-color: var(--accent); flex:none; cursor:pointer; }
+
 .data-actions{ display:flex; gap:10px; flex-wrap:wrap; }
 
 /* Card detail modal */

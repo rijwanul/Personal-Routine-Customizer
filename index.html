@@ -102,6 +102,7 @@
       <button class="tab" data-tab="times">Time slots</button>
       <button class="tab" data-tab="fields">Course fields</button>
       <button class="tab" data-tab="appearance">Appearance</button>
+      <button class="tab" data-tab="features">Features</button>
       <button class="tab" data-tab="data">Data</button>
     </div>
 
@@ -138,6 +139,24 @@
           <option value="comfortable">Comfortable</option>
           <option value="compact">Compact</option>
         </select>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel-features">
+      <p class="panel-desc">Turn optional interactions on or off.</p>
+      <div class="feature-toggle-row">
+        <div class="feature-toggle-row__text">
+          <div class="feature-toggle-row__label">Right-click to delete</div>
+          <div class="feature-toggle-row__hint">Right-click a placed class on the grid to remove it.</div>
+        </div>
+        <input type="checkbox" id="setRightClickDelete">
+      </div>
+      <div class="feature-toggle-row">
+        <div class="feature-toggle-row__text">
+          <div class="feature-toggle-row__label">Confirm before deleting</div>
+          <div class="feature-toggle-row__hint">Ask "Remove this class?" before a right-click delete goes through.</div>
+        </div>
+        <input type="checkbox" id="setConfirmBeforeDelete">
       </div>
     </div>
 
