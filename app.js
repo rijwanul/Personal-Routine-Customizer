@@ -59,7 +59,7 @@ function defaultState(){
       rightClickDelete: true,
       confirmBeforeDelete: true,
       clickEmptyCellToAdd: false,
-      bulkAddCourses: true
+      bulkAddCourses: false
     }
   };
 }
