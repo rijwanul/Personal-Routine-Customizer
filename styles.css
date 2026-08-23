@@ -154,7 +154,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   transition: margin-left var(--transition), transform var(--transition);
 }
 .bank.is-collapsed{ margin-left:-300px; }
-.bank__head{ display:flex; align-items:center; justify-content:space-between; padding:16px 16px 6px; gap:8px; }
+.bank__head{ display:flex; align-items:center; padding:16px 16px 6px; gap:8px; }
+.bank__head h2{ flex:1; }
 .bank__head h2{ font-size:14.5px; }
 /* When both "New course" and "Bulk Courses" are available at once, shrink
    both to icon-only so the header doesn't get crowded with two full-text
