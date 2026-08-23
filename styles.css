@@ -435,6 +435,34 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 }
 .swatch.is-selected{ border-color: var(--ink); }
 
+/* ============ Account modal (optional Firebase login/register) ============ */
+.account-error{
+  margin: 10px 0 0; padding: 9px 11px; border-radius:9px;
+  background: var(--rust-soft); color: var(--rust); font-size:12.5px; font-weight:600;
+}
+.account-signedin{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.account-signedin__avatar{
+  width:44px; height:44px; border-radius:50%; flex:none;
+  background: var(--accent-soft); color: var(--accent);
+  display:flex; align-items:center; justify-content:center;
+}
+.account-signedin__avatar svg{ width:22px; height:22px; }
+.account-signedin__label{ font-size:11px; color: var(--ink-faint); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+.account-signedin__username{ font-size:15px; font-weight:700; color: var(--ink); }
+.btn--icon.is-signed-in{ color: var(--accent); border-color: var(--accent); }
+.spin{ animation: spin 900ms linear infinite; }
+@keyframes spin{ to{ transform: rotate(360deg); } }
+
+/* Routine conflict choice (shown once, right after login) */
+.conflict-choices{ display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+.conflict-choice{
+  display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px;
+  width:100%; justify-content:flex-start; white-space:normal; line-height:1.4;
+}
+.conflict-choice svg{ width:20px; height:20px; flex:none; }
+.conflict-choice small{ font-weight:500; opacity:.8; }
+.conflict-choice.btn--accent small{ opacity:.85; }
+
 /* Day editor */
 .day-editor{ display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
 .day-row{

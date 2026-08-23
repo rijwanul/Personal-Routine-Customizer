@@ -112,8 +112,35 @@ function saveState(){
       console.error('Save failed', e);
       showToast('Could not save — storage may be full.', 'error');
     }
+    // Optional hook: if auth.js has loaded and the user is signed in, it
+    // registers a listener here to mirror every local save up to Firestore.
+    // app.js has no knowledge of Firebase/auth — this is a one-way, generic
+    // notification so the two files stay decoupled.
+    if(typeof window.__onRoutineStateSaved === 'function'){
+      try{ window.__onRoutineStateSaved(state); }catch(e){ console.warn('Cloud sync hook failed', e); }
+    }
   }, 150);
 }
+
+/* ---------- Cross-file bridge for auth.js (optional account/cloud-sync feature) ----------
+   auth.js is a separate, optional module that knows nothing about the shape
+   of app.js internals beyond this small surface:
+     - window.getRoutineState()      -> current state object
+     - window.replaceRoutineState(s) -> adopt a state object (e.g. loaded from
+       the cloud), persist it locally, and re-render the whole UI
+   Keeping this surface tiny means app.js works completely standalone even
+   if auth.js is removed. */
+window.getRoutineState = function(){ return state; };
+window.replaceRoutineState = function(newState){
+  try{
+    state = mergeIntoDefaultState(newState || {});
+    saveState();
+    renderAll();
+  }catch(e){
+    console.error('Could not adopt routine state', e);
+    showToast('Could not load that routine data.', 'error');
+  }
+};
 
 /* ---------- Small helpers ---------- */
 function fieldByKey(key){ return state.fields.find(f=>f.key===key); }

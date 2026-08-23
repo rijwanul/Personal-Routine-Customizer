@@ -1,12 +1,13 @@
 /* Service worker: caches the app shell so the routine works fully offline.
    Data itself lives in localStorage (see app.js), not here. */
 
-const CACHE_NAME = 'routine-customizer-v5';
+const CACHE_NAME = 'routine-customizer-v6';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './auth.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

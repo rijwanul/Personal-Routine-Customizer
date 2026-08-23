@@ -39,6 +39,9 @@
   </div>
 
   <div class="topbar__actions">
+    <button class="btn btn--icon" id="btnAccount" title="Account" aria-label="Account" hidden>
+      <i data-lucide="user"></i>
+    </button>
     <button class="btn btn--icon" id="btnBank" title="Course bank" aria-label="Toggle course bank">
       <i data-lucide="layout-list"></i>
     </button>
@@ -245,9 +248,66 @@
   </div>
 </div>
 
+<!-- ============ ACCOUNT MODAL (login / register — Firebase, optional) ============ -->
+<div class="modal-overlay" id="accountOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle">
+    <div class="modal__head">
+      <h2 id="accountModalTitle"><i data-lucide="user"></i> Account</h2>
+      <button class="btn btn--icon" id="btnCloseAccount" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body">
+      <!-- Signed-out view: single username + password field, works for both login and register -->
+      <div id="accountSignedOut">
+        <p class="panel-desc" id="accountModeHint">Enter a username and password. If you already have an account, you'll be logged in — otherwise one will be created instantly.</p>
+        <div class="form-field">
+          <label for="accountUsername">Username</label>
+          <input type="text" id="accountUsername" autocomplete="username" placeholder="at least 4 characters" spellcheck="false">
+        </div>
+        <div class="form-field">
+          <label for="accountPassword">Password</label>
+          <input type="password" id="accountPassword" autocomplete="current-password" placeholder="at least 6 characters">
+        </div>
+        <p class="account-error" id="accountError" hidden></p>
+      </div>
+      <!-- Signed-in view -->
+      <div id="accountSignedIn" hidden>
+        <div class="account-signedin">
+          <div class="account-signedin__avatar"><i data-lucide="user-check"></i></div>
+          <div>
+            <div class="account-signedin__label">Signed in as</div>
+            <div class="account-signedin__username" id="accountCurrentUsername">—</div>
+          </div>
+        </div>
+        <p class="panel-desc">Your routine syncs to this account and stays available on any device you log in from.</p>
+      </div>
+      <!-- Conflict view: shown once, right after login, only if both a local and a cloud routine exist and differ -->
+      <div id="accountConflict" hidden>
+        <p class="panel-desc">You have a routine saved to this account, and a different one on this device. Which would you like to keep?</p>
+        <div class="conflict-choices">
+          <button class="btn btn--accent conflict-choice" id="btnKeepCloud" type="button">
+            <i data-lucide="cloud-download"></i>
+            <span>Load my saved routine<br><small>Replaces what's on this device</small></span>
+          </button>
+          <button class="btn conflict-choice" id="btnKeepLocal" type="button">
+            <i data-lucide="laptop"></i>
+            <span>Keep this device's routine<br><small>Replaces what's saved to this account</small></span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="modal__foot">
+      <button class="btn btn--danger" id="btnLogout" hidden><i data-lucide="log-out"></i> Log out</button>
+      <div class="modal__spacer"></div>
+      <button class="btn" id="btnCancelAccount">Cancel</button>
+      <button class="btn btn--accent" id="btnSubmitAccount"><i data-lucide="check"></i> Continue</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast" hidden></div>
 
 <script src="app.js"></script>
+<script type="module" src="auth.js"></script>
 </body>
 </html>
