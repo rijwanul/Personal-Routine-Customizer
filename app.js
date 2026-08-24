@@ -808,6 +808,20 @@ function duplicateCourse(courseId){
   showToast('Course duplicated.');
 }
 
+/* Removes every course in the bank that has no placement on the grid.
+   Placements themselves are untouched (a course with at least one
+   placement is kept, regardless of search/filter state). */
+function removeUnusedCourses(){
+  const usedCourseIds = new Set(state.placements.map(p=>p.courseId));
+  const unused = state.courses.filter(c=>!usedCourseIds.has(c.id));
+  if(unused.length === 0){ showToast('No unused courses to remove.'); return; }
+  if(!confirm(`Remove ${unused.length} unused course${unused.length===1?'':'s'} from the bank? This can't be undone.`)) return;
+  state.courses = state.courses.filter(c=>usedCourseIds.has(c.id));
+  saveState();
+  renderBank();
+  showToast(`Removed ${unused.length} unused course${unused.length===1?'':'s'}.`);
+}
+
 /* Builds a new placement object, blank slot-field values except 'room'
    which is seeded from the course's default room number if set. Shared by
    drag-drop, the '+' icon popover, and clicking an empty cell. */
@@ -1978,6 +1992,7 @@ function wireEvents(){
     renderBank();
     bankSearchInput.focus();
   });
+  document.getElementById('btnRemoveUnusedCourses').addEventListener('click', removeUnusedCourses);
 
   // Course editor modal
   document.getElementById('btnAddCourse').addEventListener('click', ()=> openCourseEditor(null));
