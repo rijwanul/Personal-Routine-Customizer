@@ -1,7 +1,7 @@
 {
   "name": "MyRoutine Customizer",
   "short_name": "MyRoutine",
-  "description": "Build, drag, and rearrange your class routine — offline and private.",
+  "description": "Build, drag, and rearrange your class routine- offline and private.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

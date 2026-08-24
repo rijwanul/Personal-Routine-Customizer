@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>MyRoutine Customizer</title>
-<meta name="description" content="Build, drag, and rearrange your class routine — offline, private, yours.">
+<meta name="description" content="Build, drag, and rearrange your class routine: offline, private, yours.">
 <meta name="theme-color" content="#4C5FD5">
 
 <!-- PWA -->
@@ -178,7 +178,7 @@
     </div>
 
     <div class="tab-panel" id="panel-slotfields">
-      <p class="panel-desc">Slot fields can differ each time a course is placed on the grid — like a room number or a one-off note for that specific class. Turn them on or off, relabel them, and drag to reorder.</p>
+      <p class="panel-desc">Slot fields can differ each time a course is placed on the grid like a room number or a one-off note for that specific class. Turn them on or off, relabel them, and drag to reorder.</p>
       <div class="field-editor" id="slotFieldEditor"></div>
       <div class="add-field-row">
         <input type="text" id="newSlotFieldLabel" placeholder="New slot field name, e.g. Building">
@@ -195,7 +195,7 @@
       <p class="panel-desc">Personalize the look of your routine.</p>
       <div class="field-row">
         <label for="setRoutineName">Routine name</label>
-        <input type="text" id="setRoutineName" placeholder="e.g. 7th Semester — CSE">
+        <input type="text" id="setRoutineName" placeholder="e.g. 7th Semester - CSE">
       </div>
       <div class="field-row">
         <label for="setAccentColor">Accent color</label>
@@ -361,7 +361,7 @@
       <div class="feature-toggle-row">
         <div class="feature-toggle-row__text">
           <div class="feature-toggle-row__label">Make my routine importable by link</div>
-          <div class="feature-toggle-row__hint">Anyone with your import link can view and import a snapshot of your current routine and settings. They will NOT get live updates — it's a one-time copy at the moment they import it.</div>
+          <div class="feature-toggle-row__hint">Anyone with your import link can view and import a snapshot of your current routine and settings. They will NOT get live updates. It's a one-time copy at the moment they import it.</div>
         </div>
         <input type="checkbox" id="setPublicShare">
       </div>
@@ -401,7 +401,7 @@
       <div class="feature-toggle-row">
         <div class="feature-toggle-row__text">
           <div class="feature-toggle-row__label" id="importMainLabel">Import this routine and settings</div>
-          <div class="feature-toggle-row__hint">This is a one-time snapshot — it will not stay in sync with the account holder's routine after this.</div>
+          <div class="feature-toggle-row__hint">This is a one-time snapshot and it will not stay in sync with the account holder's routine after this.</div>
         </div>
         <input type="checkbox" id="setImportEnabled" checked>
       </div>
@@ -431,7 +431,7 @@
   </div>
 </div>
 
-<!-- ============ ACCOUNT MODAL (login / register — Firebase, optional) ============ -->
+<!-- ============ ACCOUNT MODAL (login / register - Firebase, optional) ============ -->
 <div class="modal-overlay" id="accountOverlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle">
     <div class="modal__head">
@@ -441,7 +441,7 @@
     <div class="modal__body">
       <!-- Signed-out view: single username + password field, works for both login and register -->
       <div id="accountSignedOut">
-        <p class="panel-desc" id="accountModeHint">Enter a username and password. If you already have an account, you'll be logged in — otherwise one will be created instantly.</p>
+        <p class="panel-desc" id="accountModeHint">Enter a username and password. If you already have an account, you'll be logged in. Otherwise one will be created instantly.</p>
         <div class="form-field">
           <label for="accountUsername">Username</label>
           <input type="text" id="accountUsername" autocomplete="username" placeholder="at least 4 characters" spellcheck="false">
@@ -458,7 +458,7 @@
           <div class="account-signedin__avatar"><i data-lucide="user-check"></i></div>
           <div>
             <div class="account-signedin__label">Signed in as</div>
-            <div class="account-signedin__username" id="accountCurrentUsername">—</div>
+            <div class="account-signedin__username" id="accountCurrentUsername">-</div>
           </div>
         </div>
         <p class="panel-desc">Your routine syncs to this account and stays available on any device you log in from.</p>

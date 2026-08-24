@@ -188,7 +188,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .bank__search-clear:hover{ background:var(--hairline); color:var(--ink); }
 .bank__list{ flex:1; overflow-y:auto; padding: 4px 14px 20px; display:flex; flex-direction:column; gap:10px; }
 .bank__list:empty::after{
-  content: "No courses yet — add one to get started.";
+  content: "No courses yet. add one to get started.";
   display:block; font-size:12.5px; color:var(--ink-faint); padding: 20px 6px; text-align:center;
 }
 .bank__list.is-search-empty::after{
@@ -278,14 +278,24 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   border: 1.5px solid var(--hairline);
   border-radius: var(--radius-lg);
   overflow:hidden;
-  background: var(--hairline);
-  gap:1px;
+  background: var(--paper-raised);
   width: max-content;
   min-width: 100%;
   box-shadow: var(--shadow-sm);
 }
 
-.g-cell{ background: var(--paper-raised); }
+.g-cell{
+  background: var(--paper-raised);
+  border-right: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+/* Grid lines used to be drawn only by a 1px `gap` + --hairline background
+   trick on .routine-grid (see `gap` removed below). That gap only showed
+   where a row/column had leftover space — but .g-slot rows use
+   minmax(var(--row-h), auto), so a cell whose content (e.g. a long-titled
+   course card) fills the whole row left no leftover space, and the line
+   disappeared right behind it. Drawing the lines directly on each cell
+   guarantees they always render, regardless of content height. */
 .g-corner{
   position:sticky; top:0; left:0; z-index:12;
   background: var(--paper-raised);
@@ -520,6 +530,7 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 .field-row input:focus, .field-row select:focus, .field-row textarea:focus{ border-color: var(--accent); }
 
 .form-grid{ display:flex; flex-direction:column; gap:12px; }
+.form-field + .form-field{ margin-top:12px; }
 .form-field label{ display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; }
 .form-field input, .form-field textarea{
   width:100%; padding: 9px 11px; border-radius:9px; border: 1.5px solid var(--hairline-strong);
