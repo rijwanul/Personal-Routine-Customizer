@@ -313,7 +313,7 @@ function applyAppearance(){
   document.getElementById('routineSubtitle').textContent = state.routineName || 'Untitled routine';
   const titleEl = document.getElementById('gridTitleInline');
   if(document.activeElement !== titleEl) titleEl.textContent = state.routineName || 'Untitled routine';
-  document.title = (state.routineName || 'MyRoutine Customizer') + ' — MyRoutine Customizer';
+  document.title = (state.routineName || 'MyRoutine Customizer') + ' - MyRoutine Customizer';
   document.body.classList.toggle('click-cell-enabled', !!state.features?.clickEmptyCellToAdd);
   const bulkEnabled = !!state.features?.bulkAddCourses;
   const bulkBtn = document.getElementById('btnBulkAddCourses');
