@@ -613,7 +613,8 @@ function wireShareUI() {
   });
 }
 
-/* ---------- 8. Import flow (visiting baseURL/import/<username>) ---------- */
+/* ---------- 8. Import flow — via baseURL/import/<username> link, or
+   manually from the Import/Export menu > "Import from Username" ---------- */
 
 function importEls() {
   return {
@@ -622,6 +623,9 @@ function importEls() {
     btnCancel: document.getElementById("btnCancelImport"),
     btnConfirm: document.getElementById("btnConfirmImport"),
     mainLabel: document.getElementById("importMainLabel"),
+    usernameField: document.getElementById("importUsernameField"),
+    usernameInput: document.getElementById("importUsernameInput"),
+    btnLookup: document.getElementById("btnImportLookup"),
     enabledToggle: document.getElementById("setImportEnabled"),
     optionsBlock: document.getElementById("importOptionsBlock"),
     appendToggle: document.getElementById("setImportAppend"),
@@ -639,21 +643,18 @@ function closeImportModal() {
   if (location.pathname.startsWith("/import/")) {
     history.replaceState(null, "", "/");
   }
+  pendingImport = null;
 }
 
-async function maybeHandleImportRoute() {
-  const match = location.pathname.match(/^\/import\/([^/]+)\/?$/);
-  if (!match) return;
-  const username = decodeURIComponent(match[1]);
-
+/** Looks up a username and, if it has a public routine, arms the confirm
+    button. Shared by both entry points (URL route and manual lookup). */
+async function beginImportForUsername(username) {
   const els_ = importEls();
   els_.mainLabel.textContent = `Import ${username}'s routine and settings`;
-  els_.overlay.hidden = false;
-  if (window.lucide) lucide.createIcons();
-
   els_.error.hidden = true;
   els_.optionsBlock.style.opacity = ".5";
   els_.btnConfirm.disabled = true;
+  pendingImport = null;
 
   try {
     const result = await fetchPublicRoutineByUsername(username);
@@ -669,14 +670,64 @@ async function maybeHandleImportRoute() {
   }
 }
 
+/** Entry point 1: visiting baseURL/import/<username>. Username comes from
+    the URL, so the manual-entry field stays hidden. */
+async function maybeHandleImportRoute() {
+  const match = location.pathname.match(/^\/import\/([^/]+)\/?$/);
+  if (!match) return;
+  const username = decodeURIComponent(match[1]);
+
+  const els_ = importEls();
+  els_.usernameField.hidden = true;
+  els_.overlay.hidden = false;
+  if (window.lucide) lucide.createIcons();
+
+  await beginImportForUsername(username);
+}
+
+/** Entry point 2: "Import from Username" in the Import/Export menu. Shows
+    the manual username field + lookup button instead of assuming one. */
+function openManualImportPrompt() {
+  const els_ = importEls();
+  els_.usernameField.hidden = false;
+  els_.usernameInput.value = "";
+  els_.mainLabel.textContent = "Import this routine and settings";
+  els_.error.hidden = true;
+  els_.optionsBlock.style.opacity = ".5";
+  els_.btnConfirm.disabled = true;
+  pendingImport = null;
+  els_.overlay.hidden = false;
+  if (window.lucide) lucide.createIcons();
+  els_.usernameInput.focus();
+}
+
 function wireImportUI() {
-  const { overlay, btnClose, btnCancel, btnConfirm, enabledToggle, optionsBlock } = importEls();
+  const { overlay, btnClose, btnCancel, btnConfirm, enabledToggle, optionsBlock, usernameInput, btnLookup } = importEls();
   btnClose.addEventListener("click", closeImportModal);
   btnCancel.addEventListener("click", closeImportModal);
   overlay.addEventListener("click", (e) => { if (e.target.id === "importOverlay") closeImportModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay.hidden) closeImportModal();
+  });
   enabledToggle.addEventListener("change", (e) => {
     optionsBlock.style.display = e.target.checked ? "" : "none";
   });
+
+  const runLookup = () => {
+    const uname = normalizeUsername(usernameInput.value);
+    if (uname.length < USERNAME_MIN_LENGTH) {
+      const { error } = importEls();
+      error.textContent = `Enter a username (at least ${USERNAME_MIN_LENGTH} characters).`;
+      error.hidden = false;
+      return;
+    }
+    beginImportForUsername(uname);
+  };
+  btnLookup.addEventListener("click", runLookup);
+  usernameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); runLookup(); }
+  });
+
   btnConfirm.addEventListener("click", () => {
     const { enabledToggle, appendToggle, replaceSettingsToggle, error } = importEls();
     if (!enabledToggle.checked || !pendingImport) { closeImportModal(); return; }
@@ -692,7 +743,6 @@ function wireImportUI() {
       const skippedNote = result.skippedPlacements ? ` (${result.skippedPlacements} placement${result.skippedPlacements===1?'':'s'} skipped — no matching day/time)` : "";
       if (window.showToast) showToast(`Imported ${result.importedCourses} course${result.importedCourses===1?'':'s'} from ${pendingImport.username}.${skippedNote}`);
     }
-    pendingImport = null;
     closeImportModal();
   });
 }
@@ -712,6 +762,19 @@ function wireImportUI() {
   wireShareUI();
   btnAccount.hidden = false;
   if (window.lucide) lucide.createIcons();
+
+  // Reveal "Import from Username" in the Import/Export menu — only makes
+  // sense once the account/Firestore feature is actually configured.
+  const menuImportUsername = document.getElementById("menuImportUsername");
+  const menuImportUsernameDivider = document.getElementById("menuImportUsernameDivider");
+  if (menuImportUsername) {
+    menuImportUsername.hidden = false;
+    if (menuImportUsernameDivider) menuImportUsernameDivider.hidden = false;
+    menuImportUsername.addEventListener("click", () => {
+      document.getElementById("exportMenu").hidden = true;
+      openManualImportPrompt();
+    });
+  }
 
   // Restore session across refreshes (Firebase Auth persists sessions in
   // IndexedDB by default, so onAuthStateChanged will fire with the

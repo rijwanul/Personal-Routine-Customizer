@@ -59,6 +59,8 @@
         <div class="menu__divider"></div>
         <button data-action="export-json-copy"><i data-lucide="clipboard-copy"></i> Copy/Paste JSON</button>
         <div class="menu__divider"></div>
+        <button data-action="import-username" id="menuImportUsername" hidden><i data-lucide="user-plus"></i> Import from Username</button>
+        <div class="menu__divider" id="menuImportUsernameDivider" hidden></div>
         <button data-action="export-png"><i data-lucide="image"></i> Export PNG</button>
         <button data-action="export-pdf"><i data-lucide="file-down"></i> Export PDF</button>
       </div>
@@ -326,7 +328,7 @@
   </div>
 </div>
 
-<!-- ============ IMPORT ROUTINE PROMPT (visited via /import/username) ============ -->
+<!-- ============ IMPORT ROUTINE PROMPT (via /import/username link, or manually by typing a username) ============ -->
 <div class="modal-overlay" id="importOverlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
     <div class="modal__head">
@@ -334,6 +336,13 @@
       <button class="btn btn--icon" id="btnCloseImport" aria-label="Close"><i data-lucide="x"></i></button>
     </div>
     <div class="modal__body">
+      <div class="form-field" id="importUsernameField" hidden>
+        <label for="importUsernameInput">Username</label>
+        <div class="share-link-row">
+          <input type="text" id="importUsernameInput" placeholder="Their username" autocomplete="off" spellcheck="false">
+          <button class="btn btn--sm" id="btnImportLookup" type="button"><i data-lucide="search"></i> Look up</button>
+        </div>
+      </div>
       <div class="feature-toggle-row">
         <div class="feature-toggle-row__text">
           <div class="feature-toggle-row__label" id="importMainLabel">Import this routine and settings</div>
