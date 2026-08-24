@@ -395,7 +395,7 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   display:flex; align-items:center; justify-content:center;
   border:none; background: rgba(255,255,255,.55); color:inherit;
   cursor:pointer; opacity:0; transition: opacity var(--transition), background var(--transition);
-  padding:0;
+  padding:0; z-index:2;
 }
 /* Invisible hit-area larger than the visible icon/pill, so it's easier to
    tap on mobile and click on desktop without changing how the icon looks. */

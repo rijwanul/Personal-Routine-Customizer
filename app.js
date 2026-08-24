@@ -41,9 +41,9 @@ const DEFAULT_DAYS = ['Sat','Sun','Mon','Tue','Wed','Thu','Fri'].map((d,i)=>({
 }));
 
 const DEFAULT_TIMES = [
-  '8:00am - 8:50am','8:50am - 9:40am','9:40am - 10:30am',
-  '10:40am - 11:30am','11:30am - 12:20pm','12:20pm - 1:10pm',
-  '2:00pm - 2:50pm','2:50pm - 3:40pm'
+  '10:50 - 11:40 AM','11:40 AM - 12:30 PM','12:30 - 01:10 PM',
+  '01:10 - 01:50 PM (BREAK)',
+  '01:50 - 02:40 PM','02:40 - 03:30 PM','03:30 - 04:20 PM'
 ].map((label,i)=>({ id:'t'+i, label }));
 
 const COURSE_PALETTE = [
