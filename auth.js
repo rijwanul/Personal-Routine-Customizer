@@ -248,7 +248,7 @@ async function fetchCloudRoutine(uid) {
   return snap.exists() ? snap.data().state : null;
 }
 
-/** Public (unauthenticated-readable) fetch, used by the /import/<username>
+/** Public (unauthenticated-readable) fetch, used by the ?import=<username>
     flow. Resolves the username to a uid via the usernames collection
     (readable by anyone per the existing Firestore rule), then reads
     routines/{uid} — which itself is only readable by anyone when that
@@ -556,7 +556,14 @@ function shareEls() {
 
 function buildShareLink() {
   if (!currentUser) return "";
-  return `${location.origin}/import/${encodeURIComponent(currentUser.username)}`;
+  // Uses the current page's own path as the base (not just location.origin)
+  // so this works correctly whether the app is hosted at a domain root or
+  // in a subpath (e.g. GitHub Pages project sites like
+  // username.github.io/repo-name/). The import link is a query param on
+  // that same base URL, so it always resolves to this same index.html —
+  // no server-side routing/rewrite rules needed.
+  const base = location.origin + location.pathname.replace(/[^/]*$/, "");
+  return `${base}?import=${encodeURIComponent(currentUser.username)}`;
 }
 
 /** Keeps the share icon's active state, the share modal's toggle+link, and
@@ -613,7 +620,7 @@ function wireShareUI() {
   });
 }
 
-/* ---------- 8. Import flow — via baseURL/import/<username> link, or
+/* ---------- 8. Import flow — via baseURL/?import=<username> link, or
    manually from the Import/Export menu > "Import from Username" ---------- */
 
 function importEls() {
@@ -638,10 +645,12 @@ let pendingImport = null; // { state, username }
 
 function closeImportModal() {
   importEls().overlay.hidden = true;
-  // Clean the /import/username path out of the URL so a refresh doesn't
-  // re-trigger the prompt after the user has already decided.
-  if (location.pathname.startsWith("/import/")) {
-    history.replaceState(null, "", "/");
+  // Clean the ?import=username query param out of the URL so a refresh
+  // doesn't re-trigger the prompt after the user has already decided.
+  if (new URLSearchParams(location.search).has("import")) {
+    const url = new URL(location.href);
+    url.searchParams.delete("import");
+    history.replaceState(null, "", url.pathname + url.search + url.hash);
   }
   pendingImport = null;
 }
@@ -670,12 +679,14 @@ async function beginImportForUsername(username) {
   }
 }
 
-/** Entry point 1: visiting baseURL/import/<username>. Username comes from
-    the URL, so the manual-entry field stays hidden. */
+/** Entry point 1: visiting baseURL/?import=<username>. Username comes from
+    the URL, so the manual-entry field stays hidden. Using a query param
+    (rather than a /import/<username> path) means this works on any static
+    host as-is — it's still the same index.html being served, just with a
+    param attached, so no server-side rewrite/fallback rule is needed. */
 async function maybeHandleImportRoute() {
-  const match = location.pathname.match(/^\/import\/([^/]+)\/?$/);
-  if (!match) return;
-  const username = decodeURIComponent(match[1]);
+  const username = new URLSearchParams(location.search).get("import");
+  if (!username) return;
 
   const els_ = importEls();
   els_.usernameField.hidden = true;

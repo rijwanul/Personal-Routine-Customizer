@@ -1,7 +1,7 @@
 /* Service worker: caches the app shell so the routine works fully offline.
    Data itself lives in localStorage (see app.js), not here. */
 
-const CACHE_NAME = 'routine-customizer-v6';
+const CACHE_NAME = 'routine-customizer-v7';
 const APP_SHELL = [
   './',
   './index.html',
@@ -41,7 +41,7 @@ self.addEventListener('fetch', (event)=>{
 
   if(isSameOrigin){
     event.respondWith(
-      caches.match(req).then(cached => cached || fetch(req).then(res=>{
+      caches.match(req, { ignoreSearch: true }).then(cached => cached || fetch(req).then(res=>{
         const resClone = res.clone();
         caches.open(CACHE_NAME).then(cache => cache.put(req, resClone));
         return res;
