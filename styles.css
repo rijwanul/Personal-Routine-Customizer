@@ -373,6 +373,13 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   cursor:pointer; opacity:0; transition: opacity var(--transition), background var(--transition);
   padding:0;
 }
+/* Invisible hit-area larger than the visible icon/pill, so it's easier to
+   tap on mobile and click on desktop without changing how the icon looks. */
+.course-card__duplicate::before{
+  content:''; position:absolute;
+  top:50%; left:50%; transform:translate(-50%,-50%);
+  width:34px; height:34px;
+}
 .course-card__duplicate svg{ width:11px; height:11px; }
 .course-card:hover .course-card__duplicate, .course-card:focus-within .course-card__duplicate{ opacity:1; }
 .course-card__duplicate:hover{ background: rgba(255,255,255,.85); }
