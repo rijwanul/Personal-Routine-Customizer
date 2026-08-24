@@ -206,6 +206,8 @@ function friendlyAuthError(e) {
 let cloudSyncActive = false;
 let cloudUid = null;
 let cloudSaveTimer = null;
+let isPublicShareOn = false; // mirrors routines/{uid}.public; included in every write below so
+                              // continuous auto-sync doesn't clobber it back to false
 
 /* ---- Sync status badge (visible only while signed in) ---- */
 function syncBadgeEl() { return document.getElementById("syncBadge"); }
@@ -246,17 +248,43 @@ async function fetchCloudRoutine(uid) {
   return snap.exists() ? snap.data().state : null;
 }
 
+/** Public (unauthenticated-readable) fetch, used by the /import/<username>
+    flow. Resolves the username to a uid via the usernames collection
+    (readable by anyone per the existing Firestore rule), then reads
+    routines/{uid} — which itself is only readable by anyone when that
+    routine's `public` field is true (enforced by the Firestore rule; see
+    the setup note at the bottom of this file). */
+async function fetchPublicRoutineByUsername(username) {
+  const { db, fsMod } = await loadFirebase();
+  const docId = usernameDocId(username);
+  const unameSnap = await fsMod.getDoc(fsMod.doc(db, "usernames", docId));
+  if (!unameSnap.exists()) return { notFound: true };
+  const targetUid = unameSnap.data().uid;
+  const routineSnap = await fsMod.getDoc(fsMod.doc(db, "routines", targetUid));
+  if (!routineSnap.exists() || !routineSnap.data().public) return { notPublic: true };
+  return { state: routineSnap.data().state, username: unameSnap.data().username };
+}
+
 async function pushRoutineToCloud(uid, state) {
   setSyncBadge("saving");
   const { db, fsMod } = await loadFirebase();
   const ref = fsMod.doc(db, "routines", uid);
   try {
-    await fsMod.setDoc(ref, { state, updatedAt: fsMod.serverTimestamp() });
+    await fsMod.setDoc(ref, { state, public: isPublicShareOn, updatedAt: fsMod.serverTimestamp() });
     setSyncBadge("saved");
   } catch (e) {
     setSyncBadge("error");
     throw e;
   }
+}
+
+/** Flips the public-import flag for the signed-in user's own routine doc. */
+async function setPublicShare(on) {
+  if (!currentUser) throw new Error("Sign in first.");
+  isPublicShareOn = !!on;
+  const { db, fsMod } = await loadFirebase();
+  const ref = fsMod.doc(db, "routines", currentUser.uid);
+  await fsMod.setDoc(ref, { public: isPublicShareOn }, { merge: true });
 }
 
 /** Starts mirroring every local save up to Firestore for this uid.
@@ -278,14 +306,21 @@ function startCloudSync(uid) {
   };
   window.addEventListener("online", () => { if (cloudSyncActive) setSyncBadge("saved"); });
   window.addEventListener("offline", () => { if (cloudSyncActive) setSyncBadge("error"); });
+  // Restore whatever the public-share flag currently is on the cloud doc,
+  // so it isn't silently reset to false by the next auto-sync write.
+  loadFirebase().then(({ db, fsMod }) => fsMod.getDoc(fsMod.doc(db, "routines", uid)))
+    .then(snap => { isPublicShareOn = !!(snap.exists() && snap.data().public); refreshShareUI(); })
+    .catch(() => {});
 }
 
 function stopCloudSync() {
   cloudSyncActive = false;
   cloudUid = null;
+  isPublicShareOn = false;
   clearTimeout(cloudSaveTimer);
   if (window.__onRoutineStateSaved) delete window.__onRoutineStateSaved;
   setSyncBadge(null);
+  refreshShareUI();
 }
 
 /** Called right after a successful login/registration. Decides whether we
@@ -389,6 +424,10 @@ function renderSignedInState() {
       btnAccount.classList.remove("is-signed-in");
     }
   }
+  const btnShare = document.getElementById("btnShareRoutine");
+  const settingsRow = document.getElementById("settingsPublicShareRow");
+  if (btnShare) btnShare.hidden = !currentUser;
+  if (settingsRow) settingsRow.hidden = !currentUser;
 }
 
 function openAccountModal() {
@@ -498,13 +537,179 @@ function wireAccountUI() {
   });
 }
 
-/* ---------- 7. Init — only show the account icon if configured ---------- */
+/* ---------- 7. Share / import-link UI ---------- */
+
+function shareEls() {
+  return {
+    btn: document.getElementById("btnShareRoutine"),
+    overlay: document.getElementById("shareOverlay"),
+    btnClose: document.getElementById("btnCloseShare"),
+    btnClose2: document.getElementById("btnCloseShare2"),
+    toggle: document.getElementById("setPublicShare"),
+    settingsToggle: document.getElementById("setPublicShareSettings"),
+    linkBlock: document.getElementById("shareLinkBlock"),
+    linkInput: document.getElementById("shareLinkInput"),
+    btnCopy: document.getElementById("btnCopyShareLink"),
+    error: document.getElementById("shareError")
+  };
+}
+
+function buildShareLink() {
+  if (!currentUser) return "";
+  return `${location.origin}/import/${encodeURIComponent(currentUser.username)}`;
+}
+
+/** Keeps the share icon's active state, the share modal's toggle+link, and
+    the mirrored Settings toggle all in sync with isPublicShareOn. Safe to
+    call anytime (e.g. right after startCloudSync restores the flag from
+    Firestore, or after the user flips it). */
+function refreshShareUI() {
+  const { btn, toggle, settingsToggle, linkBlock, linkInput } = shareEls();
+  if (btn) btn.classList.toggle("is-signed-in", isPublicShareOn);
+  if (toggle) toggle.checked = isPublicShareOn;
+  if (settingsToggle) settingsToggle.checked = isPublicShareOn;
+  if (linkBlock) linkBlock.hidden = !isPublicShareOn;
+  if (linkInput) linkInput.value = buildShareLink();
+}
+
+async function togglePublicShare(on) {
+  const { error } = shareEls();
+  error.hidden = true;
+  try {
+    await setPublicShare(on);
+    refreshShareUI();
+    if (window.showToast) showToast(on ? "Your import link is live." : "Import link turned off.");
+  } catch (e) {
+    error.textContent = "Could not update sharing — please try again.";
+    error.hidden = false;
+    refreshShareUI(); // revert any checkbox that got ahead of itself
+  }
+}
+
+function openShareModal() {
+  refreshShareUI();
+  shareEls().overlay.hidden = false;
+  if (window.lucide) lucide.createIcons();
+}
+function closeShareModal() { shareEls().overlay.hidden = true; }
+
+function wireShareUI() {
+  const { btn, btnClose, btnClose2, overlay, toggle, settingsToggle, btnCopy } = shareEls();
+  if (!btn) return;
+  btn.addEventListener("click", openShareModal);
+  btnClose.addEventListener("click", closeShareModal);
+  btnClose2.addEventListener("click", closeShareModal);
+  overlay.addEventListener("click", (e) => { if (e.target.id === "shareOverlay") closeShareModal(); });
+  toggle.addEventListener("change", (e) => togglePublicShare(e.target.checked));
+  if (settingsToggle) settingsToggle.addEventListener("change", (e) => togglePublicShare(e.target.checked));
+  btnCopy.addEventListener("click", async () => {
+    const link = buildShareLink();
+    try {
+      await navigator.clipboard.writeText(link);
+      if (window.showToast) showToast("Import link copied.");
+    } catch (e) {
+      if (window.showToast) showToast("Could not copy — select and copy manually.", "error");
+    }
+  });
+}
+
+/* ---------- 8. Import flow (visiting baseURL/import/<username>) ---------- */
+
+function importEls() {
+  return {
+    overlay: document.getElementById("importOverlay"),
+    btnClose: document.getElementById("btnCloseImport"),
+    btnCancel: document.getElementById("btnCancelImport"),
+    btnConfirm: document.getElementById("btnConfirmImport"),
+    mainLabel: document.getElementById("importMainLabel"),
+    enabledToggle: document.getElementById("setImportEnabled"),
+    optionsBlock: document.getElementById("importOptionsBlock"),
+    appendToggle: document.getElementById("setImportAppend"),
+    replaceSettingsToggle: document.getElementById("setImportReplaceSettings"),
+    error: document.getElementById("importError")
+  };
+}
+
+let pendingImport = null; // { state, username }
+
+function closeImportModal() {
+  importEls().overlay.hidden = true;
+  // Clean the /import/username path out of the URL so a refresh doesn't
+  // re-trigger the prompt after the user has already decided.
+  if (location.pathname.startsWith("/import/")) {
+    history.replaceState(null, "", "/");
+  }
+}
+
+async function maybeHandleImportRoute() {
+  const match = location.pathname.match(/^\/import\/([^/]+)\/?$/);
+  if (!match) return;
+  const username = decodeURIComponent(match[1]);
+
+  const els_ = importEls();
+  els_.mainLabel.textContent = `Import ${username}'s routine and settings`;
+  els_.overlay.hidden = false;
+  if (window.lucide) lucide.createIcons();
+
+  els_.error.hidden = true;
+  els_.optionsBlock.style.opacity = ".5";
+  els_.btnConfirm.disabled = true;
+
+  try {
+    const result = await fetchPublicRoutineByUsername(username);
+    if (result.notFound) throw new Error(`No account found for "${username}".`);
+    if (result.notPublic) throw new Error(`${username} hasn't made their routine importable.`);
+    pendingImport = { state: result.state, username: result.username };
+    els_.optionsBlock.style.opacity = "1";
+    els_.btnConfirm.disabled = false;
+  } catch (e) {
+    els_.error.textContent = e.message || "Could not load that routine.";
+    els_.error.hidden = false;
+    els_.btnConfirm.disabled = true;
+  }
+}
+
+function wireImportUI() {
+  const { overlay, btnClose, btnCancel, btnConfirm, enabledToggle, optionsBlock } = importEls();
+  btnClose.addEventListener("click", closeImportModal);
+  btnCancel.addEventListener("click", closeImportModal);
+  overlay.addEventListener("click", (e) => { if (e.target.id === "importOverlay") closeImportModal(); });
+  enabledToggle.addEventListener("change", (e) => {
+    optionsBlock.style.display = e.target.checked ? "" : "none";
+  });
+  btnConfirm.addEventListener("click", () => {
+    const { enabledToggle, appendToggle, replaceSettingsToggle, error } = importEls();
+    if (!enabledToggle.checked || !pendingImport) { closeImportModal(); return; }
+    if (!window.importRoutineState) {
+      error.textContent = "Import isn't available right now — please try again.";
+      error.hidden = false;
+      return;
+    }
+    const append = appendToggle.checked;
+    const replaceSettings = replaceSettingsToggle.checked;
+    const result = window.importRoutineState(pendingImport.state, { replace: !append, replaceSettings });
+    if (!result.error) {
+      const skippedNote = result.skippedPlacements ? ` (${result.skippedPlacements} placement${result.skippedPlacements===1?'':'s'} skipped — no matching day/time)` : "";
+      if (window.showToast) showToast(`Imported ${result.importedCourses} course${result.importedCourses===1?'':'s'} from ${pendingImport.username}.${skippedNote}`);
+    }
+    pendingImport = null;
+    closeImportModal();
+  });
+}
+
+/* ---------- 9. Init — only show the account icon if configured ---------- */
 (async function initAuth() {
-  if (!isConfigured()) return; // feature stays completely hidden/off
+  // The import route works regardless of whether the account feature is
+  // configured/signed in — it's a public, read-only flow.
+  wireImportUI();
+  maybeHandleImportRoute();
+
+  if (!isConfigured()) return; // account feature stays completely hidden/off
   const btnAccount = document.getElementById("btnAccount");
   if (!btnAccount) return;
 
   wireAccountUI();
+  wireShareUI();
   btnAccount.hidden = false;
   if (window.lucide) lucide.createIcons();
 

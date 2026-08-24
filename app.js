@@ -143,6 +143,92 @@ window.replaceRoutineState = function(newState){
   }
 };
 
+/** Imports another routine into the current one. Used by the /import/<username>
+    flow in auth.js.
+      replace=true  -> same as window.replaceRoutineState (wholesale swap)
+      replace=false -> "append": keep existing courses/placements, add the
+        imported ones alongside. Imported courses are always added as new,
+        separate entries (even if a course code matches one you already
+        have) — simplest and avoids silently combining two people's course
+        data under one card.
+    replaceSettings applies independently of append/replace: when true,
+    days/times/fields/appearance are swapped to the imported routine's
+    values. This matters most in append mode — if the day/time structure
+    is instead KEPT (replaceSettings=false) and the two routines don't
+    share the same day/time IDs (they won't, since they're different
+    accounts), imported placements are remapped onto the current grid by
+    matching day/time LABEL (e.g. imported "Sun" placement -> whichever
+    local day is labeled "Sun"). Any placement with no matching label is
+    dropped rather than silently corrupting the grid, and the user is told
+    how many were skipped. */
+window.importRoutineState = function(importedState, { replace, replaceSettings }){
+  try{
+    const imported = mergeIntoDefaultState(importedState || {});
+
+    if(replace){
+      state = imported;
+      saveState();
+      renderAll();
+      return { importedCourses: imported.courses.length, skippedPlacements: 0 };
+    }
+
+    if(replaceSettings){
+      state.days = imported.days;
+      state.times = imported.times;
+      state.fields = imported.fields;
+      state.accent = imported.accent;
+      state.density = imported.density;
+    }
+
+    // Map imported course/day/time IDs -> new IDs in the current state, so
+    // nothing collides with what's already here.
+    const courseIdMap = new Map();
+    imported.courses.forEach(c=>{
+      const newId = uid('c');
+      courseIdMap.set(c.id, newId);
+      state.courses.push(Object.assign({}, c, { id: newId }));
+    });
+
+    // Build day/time label -> id lookups for the grid we're placing onto.
+    const dayIdByLabel = new Map(state.days.map(d=>[d.label, d.id]));
+    const timeIdByKey = new Map(state.times.map(t=>[t.start+'|'+t.end, t.id]));
+    const importedDayById = new Map(imported.days.map(d=>[d.id, d]));
+    const importedTimeById = new Map(imported.times.map(t=>[t.id, t]));
+
+    let skipped = 0;
+    imported.placements.forEach(p=>{
+      const newCourseId = courseIdMap.get(p.courseId);
+      if(!newCourseId) { skipped++; return; }
+
+      let dayId = p.dayId, timeId = p.timeId;
+      if(replaceSettings){
+        // Structure was just replaced wholesale with the imported one, so
+        // imported IDs are still valid as-is.
+      } else {
+        const importedDay = importedDayById.get(p.dayId);
+        const importedTime = importedTimeById.get(p.timeId);
+        dayId = importedDay ? dayIdByLabel.get(importedDay.label) : null;
+        timeId = importedTime ? timeIdByKey.get(importedTime.start+'|'+importedTime.end) : null;
+        if(!dayId || !timeId){ skipped++; return; }
+      }
+
+      state.placements.push(Object.assign({}, p, {
+        id: uid('p'),
+        courseId: newCourseId,
+        dayId, timeId
+      }));
+    });
+
+    saveState();
+    renderAll();
+    return { importedCourses: imported.courses.length, skippedPlacements: skipped };
+  }catch(e){
+    console.error('Could not import routine', e);
+    showToast('Could not import that routine.', 'error');
+    return { importedCourses: 0, skippedPlacements: 0, error: true };
+  }
+};
+
 /* ---------- Small helpers ---------- */
 function fieldByKey(key){ return state.fields.find(f=>f.key===key); }
 function enabledFields(){ return state.fields.filter(f=>f.enabled); }

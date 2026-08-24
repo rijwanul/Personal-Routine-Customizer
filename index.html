@@ -87,6 +87,7 @@
       <span class="live-clock" id="liveClock"></span>
       <span class="offline-badge" id="offlineBadge" hidden><i data-lucide="wifi-off"></i> Offline</span>
       <span class="hint-chip"><i data-lucide="move"></i> Drag courses from the bank</span>
+      <button class="btn btn--icon" id="btnShareRoutine" title="Share / import link" aria-label="Share routine" hidden><i data-lucide="share-2"></i></button>
     </div>
     <div class="grid-scroll" id="gridScroll">
       <div class="routine-grid" id="routineGrid"></div>
@@ -189,6 +190,13 @@
         </div>
         <input type="checkbox" id="setBulkAddCourses">
       </div>
+      <div class="feature-toggle-row" id="settingsPublicShareRow" hidden>
+        <div class="feature-toggle-row__text">
+          <div class="feature-toggle-row__label">Make my routine importable by link</div>
+          <div class="feature-toggle-row__hint">Requires being signed in. Same as the share icon next to the routine title.</div>
+        </div>
+        <input type="checkbox" id="setPublicShareSettings">
+      </div>
     </div>
 
     <div class="tab-panel" id="panel-data">
@@ -281,6 +289,80 @@
       <div class="modal__spacer"></div>
       <button class="btn" id="btnCancelBulkAdd">Cancel</button>
       <button class="btn btn--accent" id="btnConfirmBulkAdd" disabled><i data-lucide="check"></i> Add courses</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SHARE / IMPORT LINK MODAL ============ -->
+<div class="modal-overlay" id="shareOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
+    <div class="modal__head">
+      <h2 id="shareModalTitle"><i data-lucide="share-2"></i> Share your routine</h2>
+      <button class="btn btn--icon" id="btnCloseShare" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body">
+      <div class="feature-toggle-row">
+        <div class="feature-toggle-row__text">
+          <div class="feature-toggle-row__label">Make my routine importable by link</div>
+          <div class="feature-toggle-row__hint">Anyone with your import link can view and import a snapshot of your current routine and settings. They will NOT get live updates — it's a one-time copy at the moment they import it.</div>
+        </div>
+        <input type="checkbox" id="setPublicShare">
+      </div>
+      <div id="shareLinkBlock" hidden>
+        <div class="form-field">
+          <label for="shareLinkInput">Your import link</label>
+          <div class="share-link-row">
+            <input type="text" id="shareLinkInput" readonly>
+            <button class="btn btn--sm" id="btnCopyShareLink" type="button"><i data-lucide="copy"></i> Copy</button>
+          </div>
+        </div>
+      </div>
+      <p class="account-error" id="shareError" hidden></p>
+    </div>
+    <div class="modal__foot">
+      <div class="modal__spacer"></div>
+      <button class="btn btn--accent" id="btnCloseShare2">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ IMPORT ROUTINE PROMPT (visited via /import/username) ============ -->
+<div class="modal-overlay" id="importOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+    <div class="modal__head">
+      <h2 id="importModalTitle"><i data-lucide="download-cloud"></i> Import shared routine</h2>
+      <button class="btn btn--icon" id="btnCloseImport" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body">
+      <div class="feature-toggle-row">
+        <div class="feature-toggle-row__text">
+          <div class="feature-toggle-row__label" id="importMainLabel">Import this routine and settings</div>
+          <div class="feature-toggle-row__hint">This is a one-time snapshot — it will not stay in sync with the account holder's routine after this.</div>
+        </div>
+        <input type="checkbox" id="setImportEnabled" checked>
+      </div>
+      <div id="importOptionsBlock">
+        <div class="feature-toggle-row">
+          <div class="feature-toggle-row__text">
+            <div class="feature-toggle-row__label">Append to my existing schedule</div>
+            <div class="feature-toggle-row__hint">Keeps your current courses and adds the imported ones alongside them. Turn off to replace your entire routine instead.</div>
+          </div>
+          <input type="checkbox" id="setImportAppend" checked>
+        </div>
+        <div class="feature-toggle-row">
+          <div class="feature-toggle-row__text">
+            <div class="feature-toggle-row__label">Also replace my settings</div>
+            <div class="feature-toggle-row__hint">Days, time slots, custom fields, and appearance will match the shared routine.</div>
+          </div>
+          <input type="checkbox" id="setImportReplaceSettings" checked>
+        </div>
+      </div>
+      <p class="account-error" id="importError" hidden></p>
+    </div>
+    <div class="modal__foot">
+      <div class="modal__spacer"></div>
+      <button class="btn" id="btnCancelImport">Not now</button>
+      <button class="btn btn--accent" id="btnConfirmImport"><i data-lucide="check"></i> Continue</button>
     </div>
   </div>
 </div>
