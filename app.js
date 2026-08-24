@@ -10,19 +10,30 @@ const STORAGE_KEY = 'routineCustomizer.v1';
    label: user-visible label (editable)
    type: 'text' | 'tel' | 'textarea'
    enabled: whether shown in course editor / bank / cards
-   core: if true, cannot be disabled (keeps app usable) */
+   core: if true, cannot be disabled (keeps app usable)
+   group: 'primary' (shown before "See more") or 'more' (collapsed by default)
+   custom: true for user-created fields (only affects delete-ability in the editor) */
 const DEFAULT_FIELDS = [
-  { key: 'courseName',     label: 'Course Name',            type: 'text',     enabled: true, core: true  },
-  { key: 'courseCode',     label: 'Course Code',            type: 'text',     enabled: true, core: false },
-  { key: 'teacherName',    label: 'Teacher Name',           type: 'text',     enabled: true, core: false },
-  { key: 'teacherShort',   label: 'Teacher Shortcode',      type: 'text',     enabled: true, core: false },
-  { key: 'teacherMobile',  label: 'Teacher Mobile Number',  type: 'tel',      enabled: true, core: false },
-  { key: 'section',        label: 'Section',                type: 'text',     enabled: true, core: false },
-  { key: 'sectionNote',    label: 'Section Note',           type: 'textarea', enabled: true, core: false },
-  { key: 'crName',         label: 'CR Name',                type: 'text',     enabled: true, core: false },
-  { key: 'crMobile',       label: 'CR Phone Number',        type: 'tel',      enabled: true, core: false },
-  { key: 'courseNote',     label: 'Note',                   type: 'textarea', enabled: true, core: false },
-  { key: 'defaultRoom',    label: 'Default Room Number',    type: 'text',     enabled: true, core: false },
+  { key: 'courseName',     label: 'Course Name',            type: 'text',     enabled: true, core: true,  group: 'primary' },
+  { key: 'teacherName',    label: 'Teacher Name',           type: 'text',     enabled: true, core: false, group: 'primary' },
+  { key: 'section',        label: 'Section',                type: 'text',     enabled: true, core: false, group: 'primary' },
+  { key: 'sectionNote',    label: 'Section Note',           type: 'textarea', enabled: true, core: false, group: 'primary' },
+  { key: 'courseCode',     label: 'Course Code',            type: 'text',     enabled: true, core: false, group: 'more' },
+  { key: 'teacherShort',   label: 'Teacher Shortcode',      type: 'text',     enabled: true, core: false, group: 'more' },
+  { key: 'teacherMobile',  label: 'Teacher Mobile Number',  type: 'tel',      enabled: true, core: false, group: 'more' },
+  { key: 'crName',         label: 'CR Name',                type: 'text',     enabled: true, core: false, group: 'more' },
+  { key: 'crMobile',       label: 'CR Phone Number',        type: 'tel',      enabled: true, core: false, group: 'more' },
+  { key: 'defaultRoom',    label: 'Default Room Number',    type: 'text',     enabled: true, core: false, group: 'more' },
+];
+
+/* ---------- Default slot-field schema ---------- */
+/* Per-placement fields (may differ each time a course is placed on the
+   grid), e.g. room number for this specific slot, or a note for this
+   specific slot. Same shape as course fields, minus 'group' (slot fields
+   have no "see more" split — the list is short by design). */
+const DEFAULT_SLOT_FIELDS = [
+  { key: 'room', label: 'Room Number',        type: 'text',     enabled: true, core: false },
+  { key: 'note', label: 'Note for this Slot',  type: 'textarea', enabled: true, core: false },
 ];
 
 const DEFAULT_DAYS = ['Sat','Sun','Mon','Tue','Wed','Thu','Fri'].map((d,i)=>({
@@ -53,8 +64,9 @@ function defaultState(){
     days: JSON.parse(JSON.stringify(DEFAULT_DAYS)),
     times: JSON.parse(JSON.stringify(DEFAULT_TIMES)),
     fields: JSON.parse(JSON.stringify(DEFAULT_FIELDS)),
+    slotFields: JSON.parse(JSON.stringify(DEFAULT_SLOT_FIELDS)),
     courses: [],        // {id, color, [fieldKey]: value, ...}
-    placements: [],      // {id, courseId, dayId, timeId, room, note}
+    placements: [],      // {id, courseId, dayId, timeId, [slotFieldKey]: value, ...}
     features: {
       rightClickDelete: true,
       confirmBeforeDelete: true,
@@ -88,18 +100,38 @@ function mergeIntoDefaultState(parsed){
   // fields is a list keyed by 'key' — merge by key so a saved/imported
   // routine from before a new field existed (e.g. defaultRoom) still picks
   // it up, instead of parsed.fields silently overwriting the whole array.
+  // Order comes from the saved array when present (so drag-reordering
+  // persists); any brand-new default fields not yet in the saved data are
+  // appended at the end of their group.
   if(Array.isArray(parsed.fields)){
-    const savedByKey = new Map(parsed.fields.map(f=>[f.key, f]));
-    merged.fields = base.fields.map(defaultField=>{
-      const saved = savedByKey.get(defaultField.key);
-      return saved ? Object.assign({}, defaultField, saved) : defaultField;
-    });
-    // preserve any custom fields the user may have (currently none are
-    // user-creatable, but this keeps the merge non-destructive)
-    parsed.fields.forEach(f=>{
-      if(!base.fields.some(bf=>bf.key===f.key)) merged.fields.push(f);
-    });
+    merged.fields = mergeFieldList(base.fields, parsed.fields);
   }
+  if(Array.isArray(parsed.slotFields)){
+    merged.slotFields = mergeFieldList(base.slotFields, parsed.slotFields);
+  }
+  return merged;
+}
+
+/* Shared by course fields and slot fields: merges a saved field list with
+   the current defaults by 'key', preserving the saved list's order (so
+   drag-and-drop reordering persists across reloads) and any custom fields
+   the user has added, while still picking up brand-new built-in fields
+   that didn't exist yet when the routine was saved. */
+function mergeFieldList(defaultList, savedList){
+  const defaultByKey = new Map(defaultList.map(f=>[f.key, f]));
+  const seen = new Set();
+  const merged = savedList
+    .filter(f=> f && f.key)
+    .map(saved=>{
+      seen.add(saved.key);
+      const def = defaultByKey.get(saved.key);
+      return def ? Object.assign({}, def, saved) : Object.assign({ group:'primary', custom:true }, saved);
+    });
+  // Any default field the saved list doesn't know about yet (e.g. added in
+  // a later app version) gets appended so it isn't lost.
+  defaultList.forEach(def=>{
+    if(!seen.has(def.key)) merged.push(def);
+  });
   return merged;
 }
 
@@ -244,6 +276,10 @@ window.importRoutineState = function(importedState, { replace, replaceSettings }
 /* ---------- Small helpers ---------- */
 function fieldByKey(key){ return state.fields.find(f=>f.key===key); }
 function enabledFields(){ return state.fields.filter(f=>f.enabled); }
+function primaryFields(){ return enabledFields().filter(f=> (f.group||'primary') !== 'more'); }
+function moreFields(){ return enabledFields().filter(f=> f.group === 'more'); }
+function slotFieldByKey(key){ return state.slotFields.find(f=>f.key===key); }
+function enabledSlotFields(){ return state.slotFields.filter(f=>f.enabled); }
 function courseById(id){ return state.courses.find(c=>c.id===id); }
 function dayById(id){ return state.days.find(d=>d.id===id); }
 function timeById(id){ return state.times.find(t=>t.id===id); }
@@ -517,11 +553,14 @@ function buildCourseCard(course, placement){
 }
 
 /* Duplicates a placed class into the same day/time cell (stacks below the
-   original, since a cell can already hold multiple course cards). */
+   original, since a cell can already hold multiple course cards). Copies
+   every slot-field value (room, note, and any custom ones) along with it. */
 function duplicatePlacement(placementId){
   const p = state.placements.find(pl=>pl.id===placementId);
   if(!p) return;
-  state.placements.push({ id: uid('pl'), courseId: p.courseId, dayId: p.dayId, timeId: p.timeId, room: p.room||'', note: p.note||'' });
+  const copy = { id: uid('pl'), courseId: p.courseId, dayId: p.dayId, timeId: p.timeId };
+  state.slotFields.forEach(f=>{ copy[f.key] = p[f.key] || ''; });
+  state.placements.push(copy);
   saveState();
   renderGrid();
   showToast('Class duplicated.');
@@ -585,8 +624,7 @@ function attachSlotDnD(slot){
     const dayId = target.dataset.dayId, timeId = target.dataset.timeId;
 
     if(payload.type === 'bank-course'){
-      const course = courseById(payload.courseId);
-      state.placements.push({ id: uid('pl'), courseId: payload.courseId, dayId, timeId, room: course?.defaultRoom || '', note:'' });
+      state.placements.push(makeNewPlacement(payload.courseId, dayId, timeId));
       saveState();
       renderGrid();
       showToast('Added to grid.');
@@ -727,13 +765,24 @@ function duplicateCourse(courseId){
   showToast('Course duplicated.');
 }
 
-/* Places a course into a specific day/time slot, using the course's
-   default room number if one is set. Shared by drag-drop, the '+' icon
-   popover, and clicking an empty cell. */
+/* Builds a new placement object, blank slot-field values except 'room'
+   which is seeded from the course's default room number if set. Shared by
+   drag-drop, the '+' icon popover, and clicking an empty cell. */
+function makeNewPlacement(courseId, dayId, timeId){
+  const course = courseById(courseId);
+  const p = { id: uid('pl'), courseId, dayId, timeId };
+  state.slotFields.forEach(f=>{
+    p[f.key] = (f.key === 'room' && course?.defaultRoom) ? course.defaultRoom : '';
+  });
+  return p;
+}
+
+/* Places a course into a specific day/time slot. Shared by drag-drop, the
+   '+' icon popover, and clicking an empty cell. */
 function addCourseToSlot(courseId, dayId, timeId){
   const course = courseById(courseId);
   if(!course) return;
-  state.placements.push({ id: uid('pl'), courseId, dayId, timeId, room: course.defaultRoom || '', note:'' });
+  state.placements.push(makeNewPlacement(courseId, dayId, timeId));
   saveState();
   renderGrid();
   showToast('Added to grid.');
@@ -754,26 +803,56 @@ function openCourseEditor(courseId, placeIntoSlot){
   document.getElementById('btnDeleteCourse').style.display = course ? 'inline-flex' : 'none';
 
   const body = document.getElementById('courseFormBody');
-  const fields = enabledFields();
+  const primary = primaryFields();
+  const more = moreFields();
   const colorVal = course?.color || COURSE_PALETTE[state.courses.length % COURSE_PALETTE.length];
+
+  const fieldHtml = (f)=>`
+    <div class="form-field">
+      <label for="cf_${f.key}">${escapeHtml(f.label)}</label>
+      ${f.type === 'textarea'
+        ? `<textarea id="cf_${f.key}" data-key="${f.key}">${escapeHtml(course?.[f.key] || '')}</textarea>`
+        : `<input type="${f.type==='tel'?'tel':'text'}" id="cf_${f.key}" data-key="${f.key}" value="${escapeHtml(course?.[f.key] || '')}">`
+      }
+    </div>
+  `;
 
   body.innerHTML = `
     <div class="form-grid">
-      ${fields.map(f=>`
-        <div class="form-field">
-          <label for="cf_${f.key}">${escapeHtml(f.label)}</label>
-          ${f.type === 'textarea'
-            ? `<textarea id="cf_${f.key}" data-key="${f.key}">${escapeHtml(course?.[f.key] || '')}</textarea>`
-            : `<input type="${f.type==='tel'?'tel':'text'}" id="cf_${f.key}" data-key="${f.key}" value="${escapeHtml(course?.[f.key] || '')}">`
-          }
-        </div>
-      `).join('')}
+      ${primary.map(fieldHtml).join('')}
       <div class="form-field">
         <label>Color</label>
         <div class="color-swatches" id="colorSwatches"></div>
       </div>
+      ${more.length ? `
+        <button type="button" class="see-more-toggle" id="btnSeeMoreFields" aria-expanded="false">
+          <i data-lucide="chevron-down"></i> <span>See more fields</span>
+        </button>
+        <div class="form-grid form-grid--more" id="moreFieldsGrid" hidden>
+          ${more.map(fieldHtml).join('')}
+        </div>
+      ` : ''}
     </div>
   `;
+
+  const seeMoreBtn = document.getElementById('btnSeeMoreFields');
+  if(seeMoreBtn){
+    const moreGrid = document.getElementById('moreFieldsGrid');
+    // Auto-expand if any "more" field already has a value, so editing an
+    // existing course never hides data the user needs to see/change.
+    const hasMoreValue = more.some(f=> course?.[f.key]);
+    if(hasMoreValue){
+      moreGrid.hidden = false;
+      seeMoreBtn.setAttribute('aria-expanded', 'true');
+      seeMoreBtn.querySelector('span').textContent = 'See fewer fields';
+    }
+    seeMoreBtn.addEventListener('click', ()=>{
+      const expanded = seeMoreBtn.getAttribute('aria-expanded') === 'true';
+      moreGrid.hidden = expanded;
+      seeMoreBtn.setAttribute('aria-expanded', String(!expanded));
+      seeMoreBtn.querySelector('span').textContent = expanded ? 'See more fields' : 'See fewer fields';
+    });
+  }
 
   const swatchWrap = document.getElementById('colorSwatches');
   COURSE_PALETTE.forEach(hex=>{
@@ -789,6 +868,7 @@ function openCourseEditor(courseId, placeIntoSlot){
   });
 
   document.getElementById('courseOverlay').hidden = false;
+  if(window.lucide) lucide.createIcons();
 }
 
 function closeCourseEditor(){
@@ -1006,9 +1086,9 @@ function openCardDetail(course, placement){
   const infoFields = enabledFields().filter(f=> f.key!=='courseName' && f.key!=='defaultRoom' && course[f.key]);
   const iconFor = (key)=>({
     courseCode:'hash', teacherName:'user', teacherShort:'user-check', teacherMobile:'phone',
-    section:'users', sectionNote:'sticky-note', crName:'shield-user', crMobile:'phone-call',
-    courseNote:'notebook-pen'
+    section:'users', sectionNote:'sticky-note', crName:'shield-user', crMobile:'phone-call'
   }[key] || 'info');
+  const slotIconFor = (key)=>({ room:'map-pin', note:'calendar-clock' }[key] || 'edit-3');
 
   body.innerHTML = `
     <div class="detail-grid">
@@ -1031,20 +1111,18 @@ function openCardDetail(course, placement){
         </div>
       `).join('')}
       <div class="detail-divider"></div>
-      <div class="detail-item detail-editable">
-        <i data-lucide="map-pin"></i>
-        <div style="flex:1">
-          <div class="detail-label">Room number</div>
-          <input type="text" id="detailRoom" value="${escapeHtml(placement.room||'')}" placeholder="e.g. Room 402">
+      ${enabledSlotFields().map(f=>`
+        <div class="detail-item detail-editable">
+          <i data-lucide="${slotIconFor(f.key)}"></i>
+          <div style="flex:1">
+            <div class="detail-label">${escapeHtml(f.label)}</div>
+            ${f.type==='textarea'
+              ? `<textarea data-slot-key="${f.key}" placeholder="e.g. Class moved this week, bring calculator...">${escapeHtml(placement[f.key]||'')}</textarea>`
+              : `<input type="${f.type==='tel'?'tel':'text'}" data-slot-key="${f.key}" value="${escapeHtml(placement[f.key]||'')}" placeholder="e.g. Room 402">`
+            }
+          </div>
         </div>
-      </div>
-      <div class="detail-item detail-editable">
-        <i data-lucide="calendar-clock"></i>
-        <div style="flex:1">
-          <div class="detail-label">Note for this slot</div>
-          <textarea id="detailNote" placeholder="e.g. Class moved this week, bring calculator...">${escapeHtml(placement.note||'')}</textarea>
-        </div>
-      </div>
+      `).join('')}
       <div class="detail-divider"></div>
       <div class="detail-item">
         <i data-lucide="palette"></i>
@@ -1081,10 +1159,9 @@ function saveCardDetailEdits(){
   if(!currentDetailPlacementId) return;
   const p = state.placements.find(pl=>pl.id===currentDetailPlacementId);
   if(!p) return;
-  const roomEl = document.getElementById('detailRoom');
-  const noteEl = document.getElementById('detailNote');
-  if(roomEl) p.room = roomEl.value.trim();
-  if(noteEl) p.note = noteEl.value.trim();
+  document.querySelectorAll('#cardDetailBody [data-slot-key]').forEach(el=>{
+    p[el.dataset.slotKey] = el.value.trim();
+  });
   saveState();
   renderGrid();
 }
@@ -1223,27 +1300,164 @@ function addTimeSlot(){
 
 /* =========================================================================
    SETTINGS — Course fields
+   Fields are shown in one draggable list. A "See more" divider row marks
+   where the primary/collapsed split happens in the course editor — drag
+   any field above or below it to change its group. Fields dropped below
+   the divider go in the 'more' (collapsed) group; above it, 'primary'.
    ========================================================================= */
 
+const SEE_MORE_DIVIDER = { __divider: true };
+
 function renderFieldEditor(){
-  const wrap = document.getElementById('fieldEditor');
+  renderFieldListEditor({
+    wrapId: 'fieldEditor',
+    list: state.fields,
+    withGroups: true,
+    onChange: ()=>{ saveState(); renderBank(); renderGrid(); }
+  });
+  wireAddFieldForm({
+    inputId: 'newFieldLabel',
+    typeSelectId: 'newFieldType',
+    btnId: 'btnAddField',
+    list: state.fields,
+    defaultGroup: 'more',
+    onAdd: ()=>{ saveState(); renderFieldEditor(); renderBank(); renderGrid(); }
+  });
+}
+
+function renderSlotFieldEditor(){
+  renderFieldListEditor({
+    wrapId: 'slotFieldEditor',
+    list: state.slotFields,
+    withGroups: false,
+    onChange: ()=>{ saveState(); renderGrid(); }
+  });
+  wireAddFieldForm({
+    inputId: 'newSlotFieldLabel',
+    typeSelectId: 'newSlotFieldType',
+    btnId: 'btnAddSlotField',
+    list: state.slotFields,
+    defaultGroup: null,
+    onAdd: ()=>{ saveState(); renderSlotFieldEditor(); renderGrid(); }
+  });
+}
+
+/* Shared renderer for both the Course fields and Slot fields lists.
+   When withGroups is true, a draggable "See more" divider row is inserted
+   between the 'primary' and 'more' groups; dragging a field row (or the
+   divider itself) across that line updates each field's group. */
+function renderFieldListEditor({ wrapId, list, withGroups, onChange }){
+  const wrap = document.getElementById(wrapId);
   wrap.innerHTML = '';
-  state.fields.forEach(f=>{
-    const row = document.createElement('div');
-    row.className = 'field-toggle-row';
-    row.innerHTML = `
-      <input type="checkbox" ${f.enabled?'checked':''} ${f.core?'disabled title="Always on"':''} data-role="enabled">
-      <input type="text" value="${escapeHtml(f.label)}" data-role="label">
-      <span class="field-key">${f.type}</span>
-    `;
-    row.querySelector('[data-role="enabled"]').addEventListener('change', (e)=>{
-      f.enabled = e.target.checked; saveState(); renderBank(); renderGrid();
+
+  const items = withGroups
+    ? [...list.filter(f=>(f.group||'primary')!=='more'), SEE_MORE_DIVIDER, ...list.filter(f=>f.group==='more')]
+    : [...list];
+
+  const reorderAndRegroup = (fromIdx, toIdx)=>{
+    const [moved] = items.splice(fromIdx,1);
+    items.splice(toIdx,0,moved);
+    // Rebuild list order + group from the new item order (dropping the divider marker)
+    let group = 'primary';
+    const next = [];
+    items.forEach(it=>{
+      if(it===SEE_MORE_DIVIDER){ group = 'more'; return; }
+      if(withGroups) it.group = group;
+      next.push(it);
     });
-    row.querySelector('[data-role="label"]').addEventListener('input', (e)=>{
-      f.label = e.target.value; saveState(); renderBank(); renderGrid();
-    });
+    list.length = 0;
+    list.push(...next);
+    onChange();
+    renderFieldListEditor({ wrapId, list, withGroups, onChange });
+  };
+
+  items.forEach((f, idx)=>{
+    let row;
+    if(f === SEE_MORE_DIVIDER){
+      row = document.createElement('div');
+      row.className = 'field-divider-row';
+      row.innerHTML = `<span class="row-drag" title="Drag to move the split"><i data-lucide="grip-vertical"></i></span><i data-lucide="chevron-down"></i> See more (collapsed by default)`;
+    } else {
+      row = document.createElement('div');
+      row.className = 'field-toggle-row';
+      row.innerHTML = `
+        <span class="row-drag" title="Drag to reorder"><i data-lucide="grip-vertical"></i></span>
+        <input type="checkbox" ${f.enabled?'checked':''} ${f.core?'disabled title="Always on"':''} data-role="enabled">
+        <input type="text" value="${escapeHtml(f.label)}" data-role="label">
+        <span class="field-key">${f.type}</span>
+        ${f.custom ? `<button class="row-del" title="Delete field" data-role="delete"><i data-lucide="trash-2"></i></button>` : ''}
+      `;
+      row.querySelector('[data-role="enabled"]').addEventListener('change', (e)=>{
+        f.enabled = e.target.checked; onChange();
+      });
+      row.querySelector('[data-role="label"]').addEventListener('input', (e)=>{
+        f.label = e.target.value; onChange();
+      });
+      const delBtn = row.querySelector('[data-role="delete"]');
+      if(delBtn){
+        delBtn.addEventListener('click', ()=>{
+          if(!confirm(`Delete the "${f.label}" field? Any values already entered for it will be lost.`)) return;
+          const i = list.indexOf(f);
+          if(i>-1) list.splice(i,1);
+          onChange();
+          renderFieldListEditor({ wrapId, list, withGroups, onChange });
+        });
+      }
+    }
+    row.draggable = true;
+    row.dataset.index = idx;
     wrap.appendChild(row);
   });
+
+  // Self-contained drag-reorder (not the generic attachRowReorder helper,
+  // since regrouping across the divider needs the drop target's index).
+  let dragFromIdx = null;
+  wrap.querySelectorAll('[draggable="true"]').forEach(row=>{
+    row.addEventListener('dragstart', ()=>{ dragFromIdx = parseInt(row.dataset.index,10); row.classList.add('dragging'); });
+    row.addEventListener('dragend', ()=> row.classList.remove('dragging'));
+    row.addEventListener('dragover', (e)=> e.preventDefault());
+    row.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      const toIdx = parseInt(row.dataset.index,10);
+      if(dragFromIdx===null || isNaN(toIdx) || dragFromIdx===toIdx) return;
+      reorderAndRegroup(dragFromIdx, toIdx);
+    });
+  });
+
+  if(window.lucide) lucide.createIcons();
+}
+
+/* Wires the small "add a field" form shared by Course fields and Slot
+   fields tabs. Uses a data-wired guard so repeated renderFieldEditor()/
+   renderSlotFieldEditor() calls (e.g. every time Settings is opened) don't
+   stack duplicate click listeners on the same button. Generates a unique
+   key from the label (e.g. "Building" -> "f_building", "f_building_2" if
+   taken) so it never collides with existing field keys. */
+function wireAddFieldForm({ inputId, typeSelectId, btnId, list, defaultGroup, onAdd }){
+  const btn = document.getElementById(btnId);
+  if(!btn || btn.dataset.wired) return;
+  btn.dataset.wired = '1';
+  const doAdd = ()=>{
+    const input = document.getElementById(inputId);
+    const typeSelect = document.getElementById(typeSelectId);
+    const label = input.value.trim();
+    if(!label){ showToast('Enter a field name first.', 'error'); return; }
+    const baseKey = 'f_' + (label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,30) || 'field');
+    let key = baseKey, n = 2;
+    while(list.some(f=>f.key===key)){ key = `${baseKey}_${n++}`; }
+    const newField = { key, label, type: typeSelect.value, enabled: true, core: false, custom: true };
+    if(defaultGroup) newField.group = defaultGroup;
+    list.push(newField);
+    input.value = '';
+    onAdd();
+  };
+  btn.addEventListener('click', doAdd);
+  const input = document.getElementById(inputId);
+  if(input){
+    input.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); doAdd(); }
+    });
+  }
 }
 
 /* =========================================================================
@@ -1254,6 +1468,7 @@ function openSettings(){
   renderDayEditor();
   renderTimeEditor();
   renderFieldEditor();
+  renderSlotFieldEditor();
   document.getElementById('setRoutineName').value = state.routineName;
   document.getElementById('setAccentColor').value = state.accent;
   document.getElementById('setDensity').value = state.density;
@@ -1299,8 +1514,13 @@ function exportTxt(){
   lines.push('');
 
   lines.push('[FIELDS]');
+  lines.push('key\tlabel\ttype\tenabled\tcore\tgroup');
+  state.fields.forEach(f=> lines.push([f.key, tsvEscape(f.label), f.type, f.enabled, f.core, f.group||'primary'].join('\t')));
+  lines.push('');
+
+  lines.push('[SLOTFIELDS]');
   lines.push('key\tlabel\ttype\tenabled\tcore');
-  state.fields.forEach(f=> lines.push([f.key, tsvEscape(f.label), f.type, f.enabled, f.core].join('\t')));
+  state.slotFields.forEach(f=> lines.push([f.key, tsvEscape(f.label), f.type, f.enabled, f.core].join('\t')));
   lines.push('');
 
   const fieldKeys = state.fields.map(f=>f.key);
@@ -1311,10 +1531,11 @@ function exportTxt(){
   });
   lines.push('');
 
+  const slotFieldKeys = state.slotFields.map(f=>f.key);
   lines.push('[PLACEMENTS]');
-  lines.push('id\tcourseId\tdayId\ttimeId\troom\tnote');
+  lines.push(['id','courseId','dayId','timeId', ...slotFieldKeys].join('\t'));
   state.placements.forEach(p=>{
-    lines.push([p.id, p.courseId, p.dayId, p.timeId, tsvEscape(p.room||''), tsvEscape(p.note||'')].join('\t'));
+    lines.push([p.id, p.courseId, p.dayId, p.timeId, ...slotFieldKeys.map(k=> tsvEscape(p[k]||''))].join('\t'));
   });
 
   const blob = new Blob([lines.join('\n')], { type:'text/plain' });
@@ -1400,7 +1621,7 @@ function importTxt(file){
   reader.onload = ()=>{
     try{
       const text = reader.result;
-      if(/^\[TIMES\]\s*[\r\n]+id\tstart\tend/m.test(text)){
+      if(/^\[TIMES\]\s*[\r\n]+id\tstart\tend/m.test(text) || !/^\[SLOTFIELDS\]/m.test(text)){
         showToast('That .txt file is from an older, unsupported version — please re-export or use JSON.', 'error');
         return;
       }
@@ -1420,7 +1641,7 @@ function importTxt(file){
 
 function parseTxtExport(text){
   const s = defaultState();
-  s.days = []; s.times = []; s.fields = []; s.courses = []; s.placements = [];
+  s.days = []; s.times = []; s.fields = []; s.slotFields = []; s.courses = []; s.placements = [];
 
   const lines = text.split(/\r?\n/);
   let section = null;
@@ -1461,19 +1682,24 @@ function parseTxtExport(text){
       }
       s.times.push({ id: row.id, label: tsvUnescape(row.label) });
     } else if(section === 'FIELDS'){
-      s.fields.push({ key: row.key, label: tsvUnescape(row.label), type: row.type, enabled: row.enabled==='true', core: row.core==='true' });
+      s.fields.push({ key: row.key, label: tsvUnescape(row.label), type: row.type, enabled: row.enabled==='true', core: row.core==='true', group: row.group || 'primary' });
+    } else if(section === 'SLOTFIELDS'){
+      s.slotFields.push({ key: row.key, label: tsvUnescape(row.label), type: row.type, enabled: row.enabled==='true', core: row.core==='true' });
     } else if(section === 'COURSES'){
       const course = { id: row.id, color: row.color };
       header.slice(2).forEach(k=> course[k] = tsvUnescape(row[k]));
       s.courses.push(course);
     } else if(section === 'PLACEMENTS'){
-      s.placements.push({ id: row.id, courseId: row.courseId, dayId: row.dayId, timeId: row.timeId, room: tsvUnescape(row.room), note: tsvUnescape(row.note) });
+      const p = { id: row.id, courseId: row.courseId, dayId: row.dayId, timeId: row.timeId };
+      header.slice(4).forEach(k=> p[k] = tsvUnescape(row[k]));
+      s.placements.push(p);
     }
   }
 
   if(s.days.length===0) s.days = defaultState().days;
   if(s.times.length===0) s.times = defaultState().times;
   if(s.fields.length===0) s.fields = defaultState().fields;
+  if(s.slotFields.length===0) s.slotFields = defaultState().slotFields;
   return s;
 }
 
@@ -1743,7 +1969,7 @@ function wireEvents(){
   ];
   document.addEventListener('keydown', (e)=>{
     if(e.key !== 'Enter') return;
-    if(e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    if(e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return;
     for(const {overlay, button} of ENTER_SUBMIT_MAP){
       const overlayEl = document.getElementById(overlay);
       if(overlayEl && !overlayEl.hidden && overlayEl.contains(e.target)){

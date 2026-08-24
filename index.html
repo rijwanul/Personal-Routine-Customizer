@@ -121,6 +121,7 @@
       <button class="tab is-active" data-tab="days">Days</button>
       <button class="tab" data-tab="times">Time slots</button>
       <button class="tab" data-tab="fields">Course fields</button>
+      <button class="tab" data-tab="slotfields">Slot fields</button>
       <button class="tab" data-tab="appearance">Appearance</button>
       <button class="tab" data-tab="features">Features</button>
       <button class="tab" data-tab="data">Data</button>
@@ -139,8 +140,31 @@
     </div>
 
     <div class="tab-panel" id="panel-fields">
-      <p class="panel-desc">Turn course fields on or off, and relabel them. All fields are optional when filling in a course.</p>
+      <p class="panel-desc">Turn course fields on or off, relabel them, and drag to reorder. Drag a field above or below "See more" to control whether it shows right away in the course editor, or only after tapping "See more". All fields are optional when filling in a course.</p>
       <div class="field-editor" id="fieldEditor"></div>
+      <div class="add-field-row">
+        <input type="text" id="newFieldLabel" placeholder="New field name, e.g. Building">
+        <select id="newFieldType">
+          <option value="text">Text</option>
+          <option value="tel">Phone number</option>
+          <option value="textarea">Long text</option>
+        </select>
+        <button class="btn btn--sm" id="btnAddField" type="button"><i data-lucide="plus"></i> Add field</button>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel-slotfields">
+      <p class="panel-desc">Slot fields can differ each time a course is placed on the grid — like a room number or a one-off note for that specific class. Turn them on or off, relabel them, and drag to reorder.</p>
+      <div class="field-editor" id="slotFieldEditor"></div>
+      <div class="add-field-row">
+        <input type="text" id="newSlotFieldLabel" placeholder="New slot field name, e.g. Building">
+        <select id="newSlotFieldType">
+          <option value="text">Text</option>
+          <option value="tel">Phone number</option>
+          <option value="textarea">Long text</option>
+        </select>
+        <button class="btn btn--sm" id="btnAddSlotField" type="button"><i data-lucide="plus"></i> Add field</button>
+      </div>
     </div>
 
     <div class="tab-panel" id="panel-appearance">

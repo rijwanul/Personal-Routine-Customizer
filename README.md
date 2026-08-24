@@ -22,7 +22,8 @@ No sign-up. No server required. No account needed. Your data stays yours.
 | | |
 |---|---|
 | 🗓️ **Grid-based routine** | Days run left to right, time slots run top to bottom. Both are fully customizable from Settings — add, rename, reorder, or remove days and time slots. |
-| 📚 **Course bank** | Create courses once (name, code, teacher, mobile number, section, CR info, and more — every field is optional and can be renamed or turned off in Settings), then drag them onto the grid. The same course can be placed multiple times across the week. |
+| 📚 **Course bank** | Create courses once (name, teacher, section, and more — every field is optional, and can be renamed, reordered, or turned off in Settings, or you can add your own custom fields). The course editor keeps the essentials up front and tucks the rest behind "See more". Drag courses onto the grid — the same course can be placed multiple times across the week. |
+| 🧷 **Slot fields** | Per-placement details like room number and a note for that specific class — configurable the same way as course fields (add, rename, reorder, or turn off in Settings), since these can differ every time you place the same course. |
 | ➕ **Bulk add courses** | Paste a whole course list at once — with or without codes — and the app parses it into ready-to-add course cards. *(Optional — enable in Settings → Features.)* |
 | 🧩 **Overlapping classes** | A single time slot can hold more than one course — they stack as cards in that cell. |
 | 🖊️ **Per-placement details** | Click any card on the grid to add a room number or note, or to see the course's full details (teacher, phone, CR, etc.). |

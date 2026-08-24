@@ -481,6 +481,18 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 }
 .form-field input:focus, .form-field textarea:focus{ border-color: var(--accent); }
 .form-field textarea{ resize:vertical; min-height:54px; }
+
+/* "See more" toggle + collapsed field group in the course editor */
+.see-more-toggle{
+  display:flex; align-items:center; gap:6px;
+  align-self:flex-start;
+  border:none; background:none; padding:4px 0;
+  font-size:12.5px; font-weight:700; color: var(--accent); cursor:pointer;
+}
+.see-more-toggle svg{ width:15px; height:15px; transition: transform var(--transition); }
+.see-more-toggle[aria-expanded="true"] svg{ transform: rotate(180deg); }
+.form-grid--more{ display:flex; flex-direction:column; gap:12px; }
+
 .color-swatches{ display:flex; gap:8px; flex-wrap:wrap; }
 .swatch{
   width:26px; height:26px; border-radius:8px; cursor:pointer; border:2px solid transparent;
@@ -552,7 +564,7 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 .time-row .time-label{ flex:1; font-weight:600; }
 
 /* Field editor (course fields on/off + relabel) */
-.field-editor{ display:flex; flex-direction:column; gap:8px; }
+.field-editor{ display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
 .field-toggle-row{
   display:flex; align-items:center; gap:10px;
   background: var(--paper); border:1.5px solid var(--hairline-strong); border-radius:10px; padding: 8px 10px;
@@ -561,6 +573,37 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 .field-toggle-row input[type="text"]{ flex:1; border:none; background:none; font-size:13px; font-weight:600; font-family:inherit; color:var(--ink); }
 .field-toggle-row input[type="text"]:focus{ outline:none; }
 .field-toggle-row .field-key{ font-size:10.5px; color: var(--ink-faint); width:120px; flex:none; }
+.field-toggle-row .row-del{ margin-left:2px; }
+
+/* "See more" divider row, draggable within the course-fields list to move
+   the primary/collapsed split point */
+.field-divider-row{
+  display:flex; align-items:center; gap:8px;
+  border-top: 1.5px dashed var(--hairline-strong);
+  padding: 8px 10px 6px;
+  font-size:11.5px; font-weight:700; letter-spacing:.02em; text-transform:uppercase;
+  color: var(--ink-faint);
+  cursor: grab;
+}
+.field-divider-row svg{ width:14px; height:14px; }
+.field-divider-row.dragging{ opacity:.5; }
+
+/* Add-field mini form (Course fields + Slot fields tabs) */
+.add-field-row{
+  display:flex; align-items:center; gap:8px;
+  margin-top: 4px;
+}
+.add-field-row input[type="text"]{
+  flex:1; min-width:0;
+  border:1.5px solid var(--hairline-strong); border-radius:9px;
+  padding: 8px 10px; font-size:13px; font-family:inherit; color:var(--ink); background: var(--paper);
+}
+.add-field-row input[type="text"]:focus{ outline:none; border-color: var(--accent); }
+.add-field-row select{
+  border:1.5px solid var(--hairline-strong); border-radius:9px;
+  padding: 8px 8px; font-size:12.5px; font-family:inherit; color:var(--ink); background: var(--paper);
+  flex: none;
+}
 
 /* Features tab (settings) */
 .feature-toggle-row{
