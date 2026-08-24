@@ -1210,6 +1210,12 @@ function openCardDetail(course, placement){
 
   document.getElementById('cardDetailOverlay').hidden = false;
   if(window.lucide) lucide.createIcons();
+
+  body.querySelectorAll('input[data-slot-key]').forEach(el=>{
+    el.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') closeCardDetail();
+    });
+  });
 }
 
 function saveCardDetailEdits(){
