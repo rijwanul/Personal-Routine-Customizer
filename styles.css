@@ -311,6 +311,17 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   box-shadow: inset 1.5px 0 0 var(--accent), inset -1.5px 0 0 var(--accent), inset 0 -3px 0 var(--accent);
 }
 
+/* Edit-from-grid: day/time headers become clickable when the feature is on */
+.g-day-head.is-grid-editable, .g-time-head.is-grid-editable{ cursor:pointer; }
+.g-day-head.is-grid-editable:hover, .g-time-head.is-grid-editable:hover{
+  background: var(--accent-soft);
+}
+.g-head-edit{
+  width:100%; border:none; background:none; font:inherit; color:inherit;
+  text-align:inherit; padding:0; outline:none;
+  border-bottom: 1.5px dashed var(--accent);
+}
+
 /* '+' quick-add button, revealed on hover/focus within a cell */
 .g-slot__add{
   position:absolute; top:5px; right:5px;
@@ -538,8 +549,7 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 }
 .time-row input[type="text"]{ border:none; background:none; font-size:13px; font-family:inherit; color:var(--ink); }
 .time-row input[type="text"]:focus{ outline:none; }
-.time-row .time-start, .time-row .time-end{ width:118px; font-weight:600; }
-.time-row .time-sep{ color: var(--ink-faint); font-size:12px; }
+.time-row .time-label{ flex:1; font-weight:600; }
 
 /* Field editor (course fields on/off + relabel) */
 .field-editor{ display:flex; flex-direction:column; gap:8px; }

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📅 Personal Routine Customizer
+# 📅 MyRoutine Customizer
 
 **A drag-and-drop class routine builder that runs entirely in your browser.**
 No sign-up. No server required. No account needed. Your data stays yours.

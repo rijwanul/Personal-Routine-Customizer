@@ -18,7 +18,7 @@ const DEFAULT_FIELDS = [
   { key: 'teacherShort',   label: 'Teacher Shortcode',      type: 'text',     enabled: true, core: false },
   { key: 'teacherMobile',  label: 'Teacher Mobile Number',  type: 'tel',      enabled: true, core: false },
   { key: 'section',        label: 'Section',                type: 'text',     enabled: true, core: false },
-  { key: 'sectionNote',    label: 'Section Note',           type: 'textarea', enabled: false, core: false },
+  { key: 'sectionNote',    label: 'Section Note',           type: 'textarea', enabled: true, core: false },
   { key: 'crName',         label: 'CR Name',                type: 'text',     enabled: true, core: false },
   { key: 'crMobile',       label: 'CR Phone Number',        type: 'tel',      enabled: true, core: false },
   { key: 'courseNote',     label: 'Note',                   type: 'textarea', enabled: true, core: false },
@@ -30,10 +30,10 @@ const DEFAULT_DAYS = ['Sat','Sun','Mon','Tue','Wed','Thu','Fri'].map((d,i)=>({
 }));
 
 const DEFAULT_TIMES = [
-  ['8:00am','8:50am'],['8:50am','9:40am'],['9:40am','10:30am'],
-  ['10:40am','11:30am'],['11:30am','12:20pm'],['12:20pm','1:10pm'],
-  ['2:00pm','2:50pm'],['2:50pm','3:40pm']
-].map((t,i)=>({ id:'t'+i, start:t[0], end:t[1] }));
+  '8:00am - 8:50am','8:50am - 9:40am','9:40am - 10:30am',
+  '10:40am - 11:30am','11:30am - 12:20pm','12:20pm - 1:10pm',
+  '2:00pm - 2:50pm','2:50pm - 3:40pm'
+].map((label,i)=>({ id:'t'+i, label }));
 
 const COURSE_PALETTE = [
   '#4C5FD5','#D9A441','#7CA982','#C4593F','#8B6BC7',
@@ -59,7 +59,8 @@ function defaultState(){
       rightClickDelete: true,
       confirmBeforeDelete: true,
       clickEmptyCellToAdd: false,
-      bulkAddCourses: true
+      bulkAddCourses: true,
+      editFromGrid: true
     }
   };
 }
@@ -69,6 +70,17 @@ let state = loadState();
 
 function mergeIntoDefaultState(parsed){
   const base = defaultState();
+  // Time slots switched from separate {start,end} fields to a single
+  // {label} field. Older saved/localStorage state with start/end is
+  // normalized here (not "supported" as an import format, just kept from
+  // crashing the app it's already living in).
+  if(Array.isArray(parsed.times)){
+    parsed.times = parsed.times.map(t=>
+      (t && t.label === undefined && (t.start !== undefined || t.end !== undefined))
+        ? { id: t.id, label: [t.start, t.end].filter(Boolean).join(' - ') }
+        : t
+    );
+  }
   const merged = Object.assign(base, parsed);
   // features is a nested object — merge its keys individually so an
   // older/partial saved 'features' object doesn't drop newly-added flags
@@ -191,7 +203,7 @@ window.importRoutineState = function(importedState, { replace, replaceSettings }
 
     // Build day/time label -> id lookups for the grid we're placing onto.
     const dayIdByLabel = new Map(state.days.map(d=>[d.label, d.id]));
-    const timeIdByKey = new Map(state.times.map(t=>[t.start+'|'+t.end, t.id]));
+    const timeIdByKey = new Map(state.times.map(t=>[t.label, t.id]));
     const importedDayById = new Map(imported.days.map(d=>[d.id, d]));
     const importedTimeById = new Map(imported.times.map(t=>[t.id, t]));
 
@@ -208,7 +220,7 @@ window.importRoutineState = function(importedState, { replace, replaceSettings }
         const importedDay = importedDayById.get(p.dayId);
         const importedTime = importedTimeById.get(p.timeId);
         dayId = importedDay ? dayIdByLabel.get(importedDay.label) : null;
-        timeId = importedTime ? timeIdByKey.get(importedTime.start+'|'+importedTime.end) : null;
+        timeId = importedTime ? timeIdByKey.get(importedTime.label) : null;
         if(!dayId || !timeId){ skipped++; return; }
       }
 
@@ -265,7 +277,7 @@ function applyAppearance(){
   document.getElementById('routineSubtitle').textContent = state.routineName || 'Untitled routine';
   const titleEl = document.getElementById('gridTitleInline');
   if(document.activeElement !== titleEl) titleEl.textContent = state.routineName || 'Untitled routine';
-  document.title = (state.routineName || 'Personal Routine Customizer') + ' — Routine Customizer';
+  document.title = (state.routineName || 'MyRoutine Customizer') + ' — MyRoutine Customizer';
   document.body.classList.toggle('click-cell-enabled', !!state.features?.clickEmptyCellToAdd);
   const bulkEnabled = !!state.features?.bulkAddCourses;
   const bulkBtn = document.getElementById('btnBulkAddCourses');
@@ -307,19 +319,29 @@ function renderGrid(){
   corner.innerHTML = '<i data-lucide="clock"></i>';
   grid.appendChild(corner);
 
+  const editable = !!state.features?.editFromGrid;
+
   // day headers
   days.forEach(day=>{
     const h = document.createElement('div');
-    h.className = 'g-cell g-day-head' + (day.id===todayId ? ' is-today' : '');
+    h.className = 'g-cell g-day-head' + (day.id===todayId ? ' is-today' : '') + (editable ? ' is-grid-editable' : '');
     h.innerHTML = `${escapeHtml(day.label)}`;
+    if(editable){
+      h.title = 'Click to rename this day';
+      h.addEventListener('click', ()=> startGridDayEdit(h, day));
+    }
     grid.appendChild(h);
   });
 
   // rows
   times.forEach(time=>{
     const th = document.createElement('div');
-    th.className = 'g-cell g-time-head';
-    th.textContent = `${time.start} – ${time.end}`;
+    th.className = 'g-cell g-time-head' + (editable ? ' is-grid-editable' : '');
+    th.textContent = time.label;
+    if(editable){
+      th.title = 'Click to edit this time slot';
+      th.addEventListener('click', ()=> startGridTimeEdit(th, time));
+    }
     grid.appendChild(th);
 
     days.forEach(day=>{
@@ -363,6 +385,76 @@ function renderGrid(){
   });
 
   if(window.lucide) lucide.createIcons();
+}
+
+/* =========================================================================
+   EDIT FROM GRID — click a day header or time-slot header on the grid
+   itself to rename/edit it inline, without opening Settings. Gated behind
+   Settings > Features > "Edit from grid" (on by default).
+   ========================================================================= */
+
+function startGridDayEdit(headEl, day){
+  if(headEl.querySelector('input')) return; // already editing
+  const original = day.label;
+  headEl.innerHTML = '';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'g-head-edit';
+  input.value = original;
+  headEl.appendChild(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const commit = ()=>{
+    if(done) return; done = true;
+    const val = input.value.trim();
+    day.label = val || original;
+    saveState();
+    renderGrid();
+  };
+  const cancel = ()=>{
+    if(done) return; done = true;
+    renderGrid();
+  };
+  input.addEventListener('click', e=> e.stopPropagation());
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); input.blur(); }
+    else if(e.key === 'Escape'){ e.preventDefault(); cancel(); }
+  });
+}
+
+function startGridTimeEdit(headEl, time){
+  if(headEl.querySelector('input')) return; // already editing
+  const original = time.label;
+  headEl.innerHTML = '';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'g-head-edit';
+  input.value = original;
+  headEl.appendChild(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const commit = ()=>{
+    if(done) return; done = true;
+    const val = input.value.trim();
+    time.label = val || original;
+    saveState();
+    renderGrid();
+  };
+  const cancel = ()=>{
+    if(done) return; done = true;
+    renderGrid();
+  };
+  input.addEventListener('click', e=> e.stopPropagation());
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); input.blur(); }
+    else if(e.key === 'Escape'){ e.preventDefault(); cancel(); }
+  });
 }
 
 function buildCourseCard(course, placement){
@@ -924,7 +1016,7 @@ function openCardDetail(course, placement){
         <i data-lucide="calendar-days"></i>
         <div>
           <div class="detail-label">When</div>
-          <div class="detail-value">${escapeHtml(day?.label||'')} · ${escapeHtml(time?.start||'')} – ${escapeHtml(time?.end||'')}</div>
+          <div class="detail-value">${escapeHtml(day?.label||'')} · ${escapeHtml(time?.label||'')}</div>
         </div>
       </div>
       <div class="detail-divider"></div>
@@ -1106,14 +1198,11 @@ function renderTimeEditor(){
     row.dataset.index = idx;
     row.innerHTML = `
       <span class="row-drag" title="Drag to reorder"><i data-lucide="grip-vertical"></i></span>
-      <input type="text" class="time-start" value="${escapeHtml(time.start)}" data-role="start" placeholder="10:40am">
-      <span class="time-sep">–</span>
-      <input type="text" class="time-end" value="${escapeHtml(time.end)}" data-role="end" placeholder="11:30am">
+      <input type="text" class="time-label" value="${escapeHtml(time.label)}" data-role="label" placeholder="10:40am - 11:30am">
       <span style="flex:1"></span>
       <button class="row-del" title="Remove time slot" data-role="delete"><i data-lucide="trash-2"></i></button>
     `;
-    row.querySelector('[data-role="start"]').addEventListener('input', (e)=>{ time.start = e.target.value; saveState(); renderGrid(); });
-    row.querySelector('[data-role="end"]').addEventListener('input', (e)=>{ time.end = e.target.value; saveState(); renderGrid(); });
+    row.querySelector('[data-role="label"]').addEventListener('input', (e)=>{ time.label = e.target.value; saveState(); renderGrid(); });
     row.querySelector('[data-role="delete"]').addEventListener('click', ()=>{
       if(state.times.length<=1){ showToast('Keep at least one time slot.', 'error'); return; }
       if(!confirm('Remove this time slot? Classes placed here will be removed too.')) return;
@@ -1128,8 +1217,7 @@ function renderTimeEditor(){
 }
 
 function addTimeSlot(){
-  const last = state.times[state.times.length-1];
-  state.times.push({ id: uid('t'), start: last ? last.end : '9:00am', end: '9:50am' });
+  state.times.push({ id: uid('t'), label: 'New time slot' });
   saveState(); renderTimeEditor(); renderGrid();
 }
 
@@ -1173,6 +1261,7 @@ function openSettings(){
   document.getElementById('setConfirmBeforeDelete').checked = !!state.features?.confirmBeforeDelete;
   document.getElementById('setClickEmptyCellToAdd').checked = !!state.features?.clickEmptyCellToAdd;
   document.getElementById('setBulkAddCourses').checked = !!state.features?.bulkAddCourses;
+  document.getElementById('setEditFromGrid').checked = !!state.features?.editFromGrid;
   document.getElementById('settingsOverlay').hidden = false;
 }
 function closeSettings(){ document.getElementById('settingsOverlay').hidden = true; }
@@ -1188,7 +1277,7 @@ function switchTab(tabName){
 
 function exportTxt(){
   const lines = [];
-  lines.push('# Personal Routine Customizer Export');
+  lines.push('# MyRoutine Customizer Export');
   lines.push('# Format: v1 — this file can be re-imported.');
   lines.push('');
   lines.push('[META]');
@@ -1205,8 +1294,8 @@ function exportTxt(){
   lines.push('');
 
   lines.push('[TIMES]');
-  lines.push('id\tstart\tend');
-  state.times.forEach(t=> lines.push([t.id, tsvEscape(t.start), tsvEscape(t.end)].join('\t')));
+  lines.push('id\tlabel');
+  state.times.forEach(t=> lines.push([t.id, tsvEscape(t.label)].join('\t')));
   lines.push('');
 
   lines.push('[FIELDS]');
@@ -1310,7 +1399,12 @@ function importTxt(file){
   const reader = new FileReader();
   reader.onload = ()=>{
     try{
-      const parsed = parseTxtExport(reader.result);
+      const text = reader.result;
+      if(/^\[TIMES\]\s*[\r\n]+id\tstart\tend/m.test(text)){
+        showToast('That .txt file is from an older, unsupported version — please re-export or use JSON.', 'error');
+        return;
+      }
+      const parsed = parseTxtExport(text);
       if(!confirm('Import this routine? It will replace your current routine (export a backup first if unsure).')) return;
       state = parsed;
       saveState();
@@ -1360,7 +1454,12 @@ function parseTxtExport(text){
     if(section === 'DAYS'){
       s.days.push({ id: row.id, label: tsvUnescape(row.label), enabled: row.enabled === 'true' });
     } else if(section === 'TIMES'){
-      s.times.push({ id: row.id, start: tsvUnescape(row.start), end: tsvUnescape(row.end) });
+      if(row.start !== undefined || row.end !== undefined){
+        // Older export format (separate start/end columns) is no longer
+        // supported — skip these rows rather than importing bad data.
+        continue;
+      }
+      s.times.push({ id: row.id, label: tsvUnescape(row.label) });
     } else if(section === 'FIELDS'){
       s.fields.push({ key: row.key, label: tsvUnescape(row.label), type: row.type, enabled: row.enabled==='true', core: row.core==='true' });
     } else if(section === 'COURSES'){
@@ -1525,6 +1624,9 @@ function wireEvents(){
   });
   document.getElementById('setBulkAddCourses').addEventListener('change', (e)=>{
     state.features.bulkAddCourses = e.target.checked; saveState(); applyAppearance();
+  });
+  document.getElementById('setEditFromGrid').addEventListener('change', (e)=>{
+    state.features.editFromGrid = e.target.checked; saveState(); renderGrid();
   });
 
   document.getElementById('btnClearGrid').addEventListener('click', ()=>{
