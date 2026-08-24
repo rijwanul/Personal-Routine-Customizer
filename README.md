@@ -30,6 +30,7 @@ No sign-up. No server required. No account needed. Your data stays yours.
 | ↔️ **Drag to move** | Drag a placed card to a different day/time to reschedule it. |
 | 📤 **Import / export** | Back up or transfer your whole routine as a `.txt` file, or export the grid as a clean **PNG** or **PDF** for printing/sharing. |
 | ☁️ **Optional cloud sync** | Sign in with a username and password to sync your routine across devices — everything still works fully offline without an account too. |
+| 🔗 **Share your routine** | Signed-in users can turn on a public import link so someone else can pull your routine's courses into their own. |
 | 📱 **Installable app (PWA)** | Install it to your phone or desktop home screen. Once installed (or even just visited once), it keeps working fully offline. |
 
 ---
@@ -86,5 +87,7 @@ Most browsers will show an **"Install"** or **"Add to Home Screen"** option when
 <div align="center">
 
 Made with 🩵 for anyone tired of messy paper routines.
+
+**[Rijwanul Hoque](https://rijwanul.com)**
 
 </div>
