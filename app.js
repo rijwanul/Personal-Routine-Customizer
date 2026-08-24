@@ -1830,6 +1830,13 @@ async function buildExportCanvas(){
   clone.style.position = 'static';
   // Remove sticky positioning artifacts for a flat export
   clone.querySelectorAll('.g-day-head, .g-time-head, .g-corner').forEach(el=>{ el.style.position='static'; });
+  // Today's column uses a color-mix() background/box-shadow for its tint
+  // and side borders. html2canvas (the export library) predates color-mix
+  // support and can't parse it, which throws and fails the ENTIRE export
+  // (both PNG and PDF go through this same clone). It's just a visual
+  // highlight, not meaningful in a static export, so strip it here.
+  clone.querySelectorAll('.is-today-col').forEach(el=>{ el.classList.remove('is-today-col'); });
+  clone.querySelectorAll('.g-day-head.is-today').forEach(el=>{ el.classList.remove('is-today'); });
   root.appendChild(clone);
 
   root.style.left = '0px';
