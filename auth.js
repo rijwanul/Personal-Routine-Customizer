@@ -426,7 +426,10 @@ function renderSignedInState() {
   }
   const btnShare = document.getElementById("btnShareRoutine");
   const settingsRow = document.getElementById("settingsPublicShareRow");
-  if (btnShare) btnShare.hidden = !currentUser;
+  if (btnShare) {
+    btnShare.classList.toggle("is-share-locked", !currentUser);
+    btnShare.title = currentUser ? "Share / import link" : "Login required to share routine";
+  }
   if (settingsRow) settingsRow.hidden = !currentUser;
 }
 
@@ -594,9 +597,32 @@ async function togglePublicShare(on) {
 }
 
 function openShareModal() {
+  if (!currentUser) {
+    showLoginRequiredToast("Login is necessary to share routine.");
+    return;
+  }
   refreshShareUI();
   shareEls().overlay.hidden = false;
   if (window.lucide) lucide.createIcons();
+}
+
+/** Same toast used app-wide, but with a clickable "Login" word that opens the account modal. */
+function showLoginRequiredToast(msg) {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.innerHTML = `<i data-lucide="alert-circle"></i> ${msg} <span class="toast__link" id="toastLoginLink">Login</span>`;
+  t.hidden = false;
+  if (window.lucide) lucide.createIcons();
+  clearTimeout(showLoginRequiredToast._timer);
+  showLoginRequiredToast._timer = setTimeout(() => { t.hidden = true; }, 4000);
+
+  const link = document.getElementById('toastLoginLink');
+  if (link) {
+    link.addEventListener('click', () => {
+      t.hidden = true;
+      openAccountModal();
+    }, { once: true });
+  }
 }
 function closeShareModal() { shareEls().overlay.hidden = true; }
 

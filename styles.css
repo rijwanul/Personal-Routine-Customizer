@@ -642,6 +642,11 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   animation: toastIn 220ms cubic-bezier(.2,.8,.2,1);
 }
 @keyframes toastIn{ from{ opacity:0; transform: translate(-50%,8px);} to{opacity:1; transform:translate(-50%,0);} }
+.toast__link{ color:#fff; text-decoration:underline; font-weight:700; cursor:pointer; }
+.toast__link:hover{ opacity:.85; }
+
+#btnShareRoutine.is-share-locked{ opacity:.45; cursor:not-allowed; }
+#btnShareRoutine.is-share-locked:hover{ transform:none; box-shadow:none; }
 
 /* Export-only clean root (kept off-screen, used for PNG/PDF capture) */
 .export-root{ position:fixed; left:-99999px; top:0; background:var(--paper-raised); }
