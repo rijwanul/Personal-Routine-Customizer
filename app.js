@@ -1342,6 +1342,49 @@ function addTimeSlot(){
 }
 
 /* =========================================================================
+   BULK ADD TIME SLOTS — inline panel (no partitioning; one line = one slot)
+   ========================================================================= */
+
+function openBulkTimesPanel(){
+  document.getElementById('bulkTimesTextarea').value = '';
+  document.getElementById('bulkTimesPanel').hidden = false;
+  updateBulkTimesCount();
+  document.getElementById('bulkTimesTextarea').focus();
+}
+
+function closeBulkTimesPanel(){
+  document.getElementById('bulkTimesPanel').hidden = true;
+  document.getElementById('bulkTimesTextarea').value = '';
+  updateBulkTimesCount();
+}
+
+function parseBulkTimesLines(){
+  const text = document.getElementById('bulkTimesTextarea').value;
+  return text.split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+}
+
+function updateBulkTimesCount(){
+  const lines = parseBulkTimesLines();
+  const countEl = document.getElementById('bulkTimesCount');
+  const confirmBtn = document.getElementById('btnConfirmBulkTimes');
+  countEl.textContent = lines.length === 0 ? '' : `${lines.length} time slot${lines.length===1?'':'s'} will be added`;
+  confirmBtn.disabled = lines.length === 0;
+}
+
+function confirmBulkTimes(){
+  const lines = parseBulkTimesLines();
+  if(lines.length === 0) return;
+  lines.forEach(label=>{
+    state.times.push({ id: uid('t'), label });
+  });
+  saveState(); renderTimeEditor(); renderGrid();
+  closeBulkTimesPanel();
+  showToast(`Added ${lines.length} time slot${lines.length===1?'':'s'}.`, 'ok');
+}
+
+/* =========================================================================
    SETTINGS — Course fields
    Fields are shown in one draggable list. A "See more" divider row marks
    where the primary/collapsed split happens in the course editor — drag
@@ -1872,6 +1915,13 @@ function wireEvents(){
 
   document.getElementById('btnAddDay').addEventListener('click', addDay);
   document.getElementById('btnAddTime').addEventListener('click', addTimeSlot);
+  document.getElementById('btnBulkAddTimes').addEventListener('click', ()=>{
+    const panel = document.getElementById('bulkTimesPanel');
+    if(panel.hidden) openBulkTimesPanel(); else closeBulkTimesPanel();
+  });
+  document.getElementById('btnCancelBulkTimes').addEventListener('click', closeBulkTimesPanel);
+  document.getElementById('btnConfirmBulkTimes').addEventListener('click', confirmBulkTimes);
+  document.getElementById('bulkTimesTextarea').addEventListener('input', updateBulkTimesCount);
 
   document.getElementById('setRoutineName').addEventListener('input', (e)=>{
     state.routineName = e.target.value; saveState(); applyAppearance();

@@ -146,7 +146,20 @@
     <div class="tab-panel" id="panel-times">
       <p class="panel-desc">Add, edit, reorder, or remove time slots. Each slot is a single free-text label, shown as typed (e.g. 10:40am - 11:30am).</p>
       <div class="time-editor" id="timeEditor"></div>
-      <button class="btn btn--sm" id="btnAddTime"><i data-lucide="plus"></i> Add time slot</button>
+      <div class="panel-actions-row">
+        <button class="btn btn--sm" id="btnAddTime"><i data-lucide="plus"></i> Add time slot</button>
+        <button class="btn btn--sm" id="btnBulkAddTimes" type="button"><i data-lucide="list-plus"></i> Bulk add time slots</button>
+      </div>
+      <div class="bulk-times" id="bulkTimesPanel" hidden>
+        <p class="bank__hint" style="margin-top:0">Paste one time slot per line. Each line becomes its own slot, added in order.</p>
+        <textarea id="bulkTimesTextarea" class="json-textarea" style="min-height:120px" spellcheck="false" placeholder="8:00am - 8:50am&#10;8:50am - 9:40am&#10;9:40am - 10:30am"></textarea>
+        <div class="bulk-times__foot">
+          <span id="bulkTimesCount" class="bulk-times__count"></span>
+          <div class="bulk-times__spacer"></div>
+          <button class="btn" id="btnCancelBulkTimes" type="button">Cancel</button>
+          <button class="btn btn--accent" id="btnConfirmBulkTimes" type="button" disabled><i data-lucide="check"></i> Add time slots</button>
+        </div>
+      </div>
     </div>
 
     <div class="tab-panel" id="panel-fields">

@@ -462,6 +462,15 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 .bulk-add__row-warn{ flex:none; color: var(--rust); }
 .bulk-add__row-warn svg{ width:14px; height:14px; display:block; }
 
+/* Bulk add time slots — inline panel (no modal, no partitioning) */
+.panel-actions-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px; }
+.bulk-times{
+  margin-top:14px; padding:12px; border:1.5px solid var(--hairline-strong); border-radius:10px; background: var(--paper);
+}
+.bulk-times__foot{ display:flex; align-items:center; gap:10px; margin-top:10px; }
+.bulk-times__count{ font-size:12.5px; font-weight:600; color: var(--ink-soft); }
+.bulk-times__spacer{ flex:1; }
+
 /* Share / import link */
 .share-link-row{ display:flex; gap:8px; }
 .share-link-row input[type="text"]{
