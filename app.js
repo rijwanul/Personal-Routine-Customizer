@@ -640,20 +640,46 @@ function attachSlotDnD(slot){
    ========================================================================= */
 
 let cellPickerTarget = null; // { dayId, timeId }
+let cellPickerAnchorEl = null;
 
 function openCellPicker(dayId, timeId, anchorEl){
   cellPickerTarget = { dayId, timeId };
+  cellPickerAnchorEl = anchorEl;
+  const searchInput = document.getElementById('cellPickerSearchInput');
+  if(searchInput) searchInput.value = '';
+  const clearBtn = document.getElementById('btnCellPickerSearchClear');
+  if(clearBtn) clearBtn.hidden = true;
+
+  renderCellPickerList();
+
+  // Position near the anchor (falls back to centered if it doesn't fit)
   const picker = document.getElementById('cellPicker');
+  picker.hidden = false;
+  positionCellPicker(picker, anchorEl);
+  if(window.lucide) lucide.createIcons();
+  if(searchInput) searchInput.focus();
+}
+
+function renderCellPickerList(){
   const list = document.getElementById('cellPickerList');
+  const searchInput = document.getElementById('cellPickerSearchInput');
+  const query = searchInput ? searchInput.value : '';
   list.innerHTML = '';
+
+  const courses = state.courses.filter(c=>courseMatchesSearch(c, query));
 
   if(state.courses.length === 0){
     const empty = document.createElement('div');
     empty.className = 'cell-picker__empty';
     empty.textContent = 'No courses in your bank yet — create one below.';
     list.appendChild(empty);
+  } else if(courses.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'cell-picker__empty';
+    empty.textContent = 'No courses match your search.';
+    list.appendChild(empty);
   } else {
-    state.courses.forEach(course=>{
+    courses.forEach(course=>{
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'cell-picker__item';
@@ -663,18 +689,18 @@ function openCellPicker(dayId, timeId, anchorEl){
         <span class="cell-picker__item-name">${escapeHtml(courseTitle(course))}</span>
         ${sub ? `<span class="cell-picker__item-sub">${escapeHtml(sub)}</span>` : ''}
       `;
+      const target = cellPickerTarget;
       item.addEventListener('click', ()=>{
-        addCourseToSlot(course.id, dayId, timeId);
+        if(!target) return;
+        addCourseToSlot(course.id, target.dayId, target.timeId);
         closeCellPicker();
       });
       list.appendChild(item);
     });
   }
 
-  // Position near the anchor (falls back to centered if it doesn't fit)
-  picker.hidden = false;
-  positionCellPicker(picker, anchorEl);
-  if(window.lucide) lucide.createIcons();
+  const picker = document.getElementById('cellPicker');
+  if(!picker.hidden && cellPickerAnchorEl) positionCellPicker(picker, cellPickerAnchorEl);
 }
 
 function positionCellPicker(picker, anchorEl){
@@ -693,6 +719,7 @@ function positionCellPicker(picker, anchorEl){
 function closeCellPicker(){
   document.getElementById('cellPicker').hidden = true;
   cellPickerTarget = null;
+  cellPickerAnchorEl = null;
 }
 
 function openCourseEditorForCell(){
@@ -706,10 +733,26 @@ function openCourseEditorForCell(){
    COURSE BANK
    ========================================================================= */
 
+/* Matches a course against a free-text search query across Course Code,
+   Course Name, Teacher Name, and Teacher Shortcode. Case-insensitive,
+   matches if the query appears anywhere in any of those fields. */
+function courseMatchesSearch(course, query){
+  if(!query) return true;
+  const q = query.trim().toLowerCase();
+  if(!q) return true;
+  const haystack = [course.courseCode, course.courseName, course.teacherName, course.teacherShort]
+    .filter(Boolean).join(' \u0000 ').toLowerCase();
+  return haystack.includes(q);
+}
+
 function renderBank(){
   const list = document.getElementById('bankList');
+  const searchInput = document.getElementById('bankSearchInput');
+  const query = searchInput ? searchInput.value : '';
   list.innerHTML = '';
-  state.courses.forEach(course=>{
+  const courses = state.courses.filter(c=>courseMatchesSearch(c, query));
+  list.classList.toggle('is-search-empty', state.courses.length > 0 && courses.length === 0);
+  courses.forEach(course=>{
     const chip = document.createElement('div');
     chip.className = 'course-chip';
     chip.style.borderLeftColor = course.color;
@@ -1872,6 +1915,20 @@ function wireEvents(){
   });
   gridTitle.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); gridTitle.blur(); } });
 
+  // Course bank search
+  const bankSearchInput = document.getElementById('bankSearchInput');
+  const btnBankSearchClear = document.getElementById('btnBankSearchClear');
+  bankSearchInput.addEventListener('input', ()=>{
+    btnBankSearchClear.hidden = bankSearchInput.value.length === 0;
+    renderBank();
+  });
+  btnBankSearchClear.addEventListener('click', ()=>{
+    bankSearchInput.value = '';
+    btnBankSearchClear.hidden = true;
+    renderBank();
+    bankSearchInput.focus();
+  });
+
   // Course editor modal
   document.getElementById('btnAddCourse').addEventListener('click', ()=> openCourseEditor(null));
   document.getElementById('btnCloseCourse').addEventListener('click', closeCourseEditor);
@@ -1908,6 +1965,20 @@ function wireEvents(){
   // Cell course picker (the '+' icon / empty-cell click popover)
   document.getElementById('btnCloseCellPicker').addEventListener('click', closeCellPicker);
   document.getElementById('btnCellPickerNew').addEventListener('click', openCourseEditorForCell);
+  const cellPickerSearchInput = document.getElementById('cellPickerSearchInput');
+  const btnCellPickerSearchClear = document.getElementById('btnCellPickerSearchClear');
+  cellPickerSearchInput.addEventListener('input', ()=>{
+    btnCellPickerSearchClear.hidden = cellPickerSearchInput.value.length === 0;
+    renderCellPickerList();
+  });
+  cellPickerSearchInput.addEventListener('click', (e)=> e.stopPropagation());
+  cellPickerSearchInput.addEventListener('keydown', (e)=> e.stopPropagation());
+  btnCellPickerSearchClear.addEventListener('click', ()=>{
+    cellPickerSearchInput.value = '';
+    btnCellPickerSearchClear.hidden = true;
+    renderCellPickerList();
+    cellPickerSearchInput.focus();
+  });
   document.addEventListener('click', (e)=>{
     const picker = document.getElementById('cellPicker');
     if(picker.hidden) return;

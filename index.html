@@ -78,6 +78,11 @@
       <button class="btn btn--sm" id="btnBulkAddCourses" title="Bulk Courses" hidden><i data-lucide="list-plus"></i><span class="btn-label"> Bulk Courses</span></button>
     </div>
     <p class="bank__hint">Drag a card onto the grid. Click one to edit it.</p>
+    <div class="bank__search">
+      <i data-lucide="search"></i>
+      <input type="text" id="bankSearchInput" placeholder="Search code, name, teacher..." autocomplete="off" spellcheck="false">
+      <button class="bank__search-clear" id="btnBankSearchClear" type="button" aria-label="Clear search" hidden><i data-lucide="x"></i></button>
+    </div>
     <div class="bank__list" id="bankList"></div>
   </aside>
 
@@ -105,6 +110,11 @@
   <div class="cell-picker__head">
     <span>Choose a course</span>
     <button class="btn btn--icon btn--sm" id="btnCloseCellPicker" aria-label="Close"><i data-lucide="x"></i></button>
+  </div>
+  <div class="cell-picker__search">
+    <i data-lucide="search"></i>
+    <input type="text" id="cellPickerSearchInput" placeholder="Search code, name, teacher..." autocomplete="off" spellcheck="false">
+    <button class="cell-picker__search-clear" id="btnCellPickerSearchClear" type="button" aria-label="Clear search" hidden><i data-lucide="x"></i></button>
   </div>
   <div class="cell-picker__list" id="cellPickerList"></div>
   <button class="cell-picker__newbtn" id="btnCellPickerNew"><i data-lucide="plus"></i> New course for this slot</button>
