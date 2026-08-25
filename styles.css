@@ -540,6 +540,7 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 
 .form-grid{ display:flex; flex-direction:column; gap:12px; }
 .form-field + .form-field{ margin-top:12px; }
+#importUsernameField{ margin-bottom:12px; }
 .form-field label{ display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; }
 .form-field input, .form-field textarea{
   width:100%; padding: 9px 11px; border-radius:9px; border: 1.5px solid var(--hairline-strong);
