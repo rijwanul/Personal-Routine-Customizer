@@ -421,8 +421,8 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 .course-card:hover{ transform: translateY(-1px); box-shadow: var(--shadow-md); }
 /* Classes marked "Faded?" reduce visual weight without hiding them
    entirely — still fully visible and clickable, just deprioritized. */
-.course-card.is-skipped{ opacity:.4; }
-.course-card.is-skipped:hover{ opacity:.7; }
+.course-card.is-skipped{ opacity: var(--fade-opacity, .4); }
+.course-card.is-skipped:hover{ opacity: max(var(--fade-opacity, .4), .7); }
 /* Bank funnel filter: every card except the selected course's fades to
    30% opacity. Combines additively with is-skipped (a filtered-out card
    that's also marked "Faded?" ends up even fainter, which is fine — both
@@ -436,6 +436,9 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   margin-top:12px; cursor:pointer;
 }
 .detail-checkbox-row input[type="checkbox"]{ width:17px; height:17px; accent-color: var(--accent); cursor:pointer; }
+.detail-checkbox-row input[type="range"]{
+  margin-left:auto; width:110px; accent-color: var(--accent); cursor:pointer;
+}
 .course-card.drop-before{ box-shadow: inset 0 2px 0 var(--accent); }
 .course-card.drop-after{ box-shadow: inset 0 -2px 0 var(--accent); }
 .course-card__name{ font-weight:700; font-size:12.5px; line-height:1.25; }

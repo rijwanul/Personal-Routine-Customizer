@@ -509,7 +509,10 @@ function buildCourseCard(course, placement){
   card.style.color = shadeForText(course.color);
   card.draggable = true;
   card.dataset.placementId = placement.id;
-  if(placement.skipped) card.classList.add('is-skipped');
+  if(placement.skipped){
+    card.classList.add('is-skipped');
+    card.style.setProperty('--fade-opacity', ((placement.fadeOpacity ?? 40) / 100));
+  }
   if(bankFilterCourseId && course.id !== bankFilterCourseId) card.classList.add('is-filtered-out');
 
   const name = courseTitle(course);
@@ -578,7 +581,7 @@ function buildCourseCard(course, placement){
 function duplicatePlacement(placementId){
   const p = state.placements.find(pl=>pl.id===placementId);
   if(!p) return;
-  const copy = { id: uid('pl'), courseId: p.courseId, dayId: p.dayId, timeId: p.timeId, skipped: p.skipped || false };
+  const copy = { id: uid('pl'), courseId: p.courseId, dayId: p.dayId, timeId: p.timeId, skipped: p.skipped || false, fadeOpacity: p.fadeOpacity ?? 40 };
   state.slotFields.forEach(f=>{ copy[f.key] = p[f.key] || ''; });
   state.placements.push(copy);
   saveState();
@@ -885,7 +888,7 @@ function removeUnusedCourses(){
    drag-drop, the '+' icon popover, and clicking an empty cell. */
 function makeNewPlacement(courseId, dayId, timeId){
   const course = courseById(courseId);
-  const p = { id: uid('pl'), courseId, dayId, timeId, skipped: false };
+  const p = { id: uid('pl'), courseId, dayId, timeId, skipped: false, fadeOpacity: 40 };
   state.slotFields.forEach(f=>{
     p[f.key] = (f.key === 'room' && course?.defaultRoom) ? course.defaultRoom : '';
   });
@@ -1249,6 +1252,7 @@ function openCardDetail(course, placement){
       <label class="detail-checkbox-row">
         <input type="checkbox" id="detailAttendToggle" ${placement.skipped ? 'checked' : ''}>
         Faded?
+        <input type="range" id="detailFadeSlider" min="0" max="100" step="5" value="${placement.fadeOpacity ?? 40}" title="${placement.fadeOpacity ?? 40}%" ${placement.skipped ? '' : 'hidden'}>
       </label>
     </div>
   `;
@@ -1270,8 +1274,25 @@ function openCardDetail(course, placement){
     swatchWrap.appendChild(sw);
   });
 
+  const fadeSlider = document.getElementById('detailFadeSlider');
+
   document.getElementById('detailAttendToggle').addEventListener('change', (e)=>{
     placement.skipped = e.target.checked;
+    fadeSlider.hidden = !placement.skipped;
+    if(placement.skipped){
+      // Always start fresh at the default (40%) on re-check, rather than
+      // recalling whatever value was set the last time this was faded.
+      placement.fadeOpacity = 40;
+      fadeSlider.value = 40;
+      fadeSlider.title = '40%';
+    }
+    saveState();
+    renderGrid();
+  });
+
+  fadeSlider.addEventListener('input', (e)=>{
+    placement.fadeOpacity = parseInt(e.target.value, 10);
+    fadeSlider.title = placement.fadeOpacity + '%';
     saveState();
     renderGrid();
   });
