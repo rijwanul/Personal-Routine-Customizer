@@ -510,6 +510,7 @@ function buildCourseCard(course, placement){
   card.draggable = true;
   card.dataset.placementId = placement.id;
   if(placement.skipped) card.classList.add('is-skipped');
+  if(bankFilterCourseId && course.id !== bankFilterCourseId) card.classList.add('is-filtered-out');
 
   const name = courseTitle(course);
   const sub = [course.courseCode, course.teacherShort || course.teacherName].filter(Boolean).join(' · ');
@@ -783,6 +784,18 @@ function courseMatchesSearch(course, query){
   return haystack.includes(q);
 }
 
+/* Bank "funnel" filter: temporarily fades every grid card except those
+   belonging to one selected course. Intentionally NOT persisted to state/
+   localStorage — it's a transient view filter, so a page refresh always
+   clears it, as does clicking the funnel again. */
+let bankFilterCourseId = null;
+
+function toggleBankFilter(courseId){
+  bankFilterCourseId = (bankFilterCourseId === courseId) ? null : courseId;
+  renderBank();
+  renderGrid();
+}
+
 function renderBank(){
   const list = document.getElementById('bankList');
   const searchInput = document.getElementById('bankSearchInput');
@@ -806,10 +819,13 @@ function renderBank(){
         <button class="course-chip__duplicate" title="Duplicate course" aria-label="Duplicate course"><i data-lucide="copy-plus"></i></button>
         <button class="course-chip__edit" title="Edit course" aria-label="Edit course"><i data-lucide="pencil"></i></button>
       </div>
+      <button class="course-chip__filter" title="${bankFilterCourseId===course.id ? 'Clear filter' : 'Show only this course on the grid'}" aria-label="Filter grid to this course"><i data-lucide="${bankFilterCourseId===course.id ? 'funnel-x' : 'funnel'}"></i></button>
       <div class="course-chip__name">${escapeHtml(courseTitle(course))}</div>
       ${course.courseCode ? `<div class="course-chip__code">${escapeHtml(course.courseCode)}</div>` : ''}
       ${metaBits.length ? `<div class="course-chip__meta"><span>${metaBits.map(escapeHtml).join(' · ')}</span></div>` : ''}
     `;
+
+    if(bankFilterCourseId === course.id) chip.classList.add('is-filter-active');
 
     chip.addEventListener('dragstart', (e)=>{
       e.dataTransfer.setData('text/plain', JSON.stringify({ type:'bank-course', courseId: course.id }));
@@ -817,6 +833,10 @@ function renderBank(){
       chip.classList.add('dragging');
     });
     chip.addEventListener('dragend', ()=> chip.classList.remove('dragging'));
+    chip.querySelector('.course-chip__filter').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      toggleBankFilter(course.id);
+    });
     chip.querySelector('.course-chip__edit').addEventListener('click', (e)=>{
       e.stopPropagation();
       openCourseEditor(course.id);
