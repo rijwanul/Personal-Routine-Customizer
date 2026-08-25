@@ -405,6 +405,8 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   position:relative;
 }
 .course-card:hover{ transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.course-card.drop-before{ box-shadow: inset 0 2px 0 var(--accent); }
+.course-card.drop-after{ box-shadow: inset 0 -2px 0 var(--accent); }
 .course-card__name{ font-weight:700; font-size:12.5px; line-height:1.25; }
 .course-card__sub{ font-size:10.5px; opacity:.85; margin-top:2px; font-weight:500; }
 .course-card__row{ display:flex; align-items:center; gap:4px; font-size:10px; margin-top:4px; opacity:.85; }

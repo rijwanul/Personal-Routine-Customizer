@@ -545,6 +545,23 @@ function buildCourseCard(course, placement){
     card.classList.add('dragging');
   });
   card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+
+  // Allow reordering cards within the same cell: hovering the top half of
+  // another card in the cell signals "insert before it", the bottom half
+  // signals "insert after it". Purely visual — actual reordering happens
+  // in the slot's drop handler below, which reads this via a data attribute.
+  card.addEventListener('dragover', (e)=>{
+    if(card.classList.contains('dragging')) return; // hovering itself
+    e.preventDefault();
+    e.stopPropagation(); // don't let the slot's own dragover also fire highlight logic oddly
+    const rect = card.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    card.classList.toggle('drop-before', before);
+    card.classList.toggle('drop-after', !before);
+  });
+  card.addEventListener('dragleave', ()=>{
+    card.classList.remove('drop-before', 'drop-after');
+  });
   card.querySelector('.course-card__duplicate').addEventListener('click', (e)=>{
     e.stopPropagation();
     duplicatePlacement(placement.id);
@@ -631,7 +648,26 @@ function attachSlotDnD(slot){
       showToast('Added to grid.');
     } else if(payload.type === 'move-placement'){
       const p = state.placements.find(pl=>pl.id===payload.placementId);
-      if(p){ p.dayId = dayId; p.timeId = timeId; saveState(); renderGrid(); }
+      if(!p) return;
+
+      // If the drop landed over a specific card's top/bottom half (set by
+      // that card's own dragover handler above), reorder relative to it.
+      const overCard = target.querySelector('.course-card.drop-before, .course-card.drop-after');
+      const insertBefore = overCard?.classList.contains('drop-before');
+      target.querySelectorAll('.course-card').forEach(c=> c.classList.remove('drop-before','drop-after'));
+
+      p.dayId = dayId; p.timeId = timeId;
+
+      if(overCard){
+        const overId = overCard.dataset.placementId;
+        const fromIdx = state.placements.indexOf(p);
+        state.placements.splice(fromIdx, 1);
+        const overIdx = state.placements.findIndex(pl=>pl.id===overId);
+        const insertAt = insertBefore ? overIdx : overIdx + 1;
+        state.placements.splice(insertAt, 0, p);
+      }
+
+      saveState(); renderGrid();
     }
   });
 }
