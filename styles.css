@@ -811,6 +811,7 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   transition: background var(--transition), transform var(--transition);
 }
 .cell-picker__item:hover{ background: var(--accent-soft); transform: translateX(1px); }
+.cell-picker__item.is-highlighted{ background: var(--accent-soft); transform: translateX(1px); }
 .cell-picker__item-name{ font-size:13px; font-weight:600; color:var(--ink); }
 .cell-picker__item-sub{ font-size:11px; color:var(--ink-faint); }
 .cell-picker__empty{ font-size:12px; color:var(--ink-faint); text-align:center; padding:16px 8px; }

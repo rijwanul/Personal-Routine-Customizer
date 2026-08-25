@@ -687,6 +687,7 @@ function attachSlotDnD(slot){
 let cellPickerTarget = null; // { dayId, timeId }
 let cellPickerAnchorEl = null;
 let cellPickerOpenedAt = 0;
+let cellPickerHighlightIndex = -1;
 
 function openCellPicker(dayId, timeId, anchorEl){
   cellPickerTarget = { dayId, timeId };
@@ -713,6 +714,23 @@ function openCellPicker(dayId, timeId, anchorEl){
   if(searchInput && !isTouchDevice) searchInput.focus();
 }
 
+function pickCellPickerItem(course){
+  const target = cellPickerTarget;
+  if(!target) return;
+  addCourseToSlot(course.id, target.dayId, target.timeId);
+  closeCellPicker();
+}
+
+function applyCellPickerHighlight(){
+  const items = document.querySelectorAll('#cellPickerList .cell-picker__item');
+  items.forEach((el, i)=>{
+    el.classList.toggle('is-highlighted', i === cellPickerHighlightIndex);
+  });
+  if(cellPickerHighlightIndex >= 0 && items[cellPickerHighlightIndex]){
+    items[cellPickerHighlightIndex].scrollIntoView({ block:'nearest' });
+  }
+}
+
 function renderCellPickerList(){
   const list = document.getElementById('cellPickerList');
   const searchInput = document.getElementById('cellPickerSearchInput');
@@ -720,6 +738,9 @@ function renderCellPickerList(){
   list.innerHTML = '';
 
   const courses = state.courses.filter(c=>courseMatchesSearch(c, query));
+  // Reset the keyboard-navigation highlight to the first result whenever
+  // the list changes (e.g. as the user types a new search).
+  cellPickerHighlightIndex = courses.length > 0 ? 0 : -1;
 
   if(state.courses.length === 0){
     const empty = document.createElement('div');
@@ -742,15 +763,16 @@ function renderCellPickerList(){
         <span class="cell-picker__item-name">${escapeHtml(courseTitle(course))}</span>
         ${sub ? `<span class="cell-picker__item-sub">${escapeHtml(sub)}</span>` : ''}
       `;
-      const target = cellPickerTarget;
-      item.addEventListener('click', ()=>{
-        if(!target) return;
-        addCourseToSlot(course.id, target.dayId, target.timeId);
-        closeCellPicker();
+      item.addEventListener('click', ()=> pickCellPickerItem(course));
+      item.addEventListener('mouseenter', ()=>{
+        cellPickerHighlightIndex = courses.indexOf(course);
+        applyCellPickerHighlight();
       });
       list.appendChild(item);
     });
   }
+
+  applyCellPickerHighlight();
 
   const picker = document.getElementById('cellPicker');
   if(!picker.hidden && cellPickerAnchorEl) positionCellPicker(picker, cellPickerAnchorEl);
@@ -2155,7 +2177,26 @@ function wireEvents(){
     renderCellPickerList();
   });
   cellPickerSearchInput.addEventListener('click', (e)=> e.stopPropagation());
-  cellPickerSearchInput.addEventListener('keydown', (e)=> e.stopPropagation());
+  cellPickerSearchInput.addEventListener('keydown', (e)=>{
+    e.stopPropagation();
+    const items = document.querySelectorAll('#cellPickerList .cell-picker__item');
+    if(items.length === 0) return;
+
+    if(e.key === 'ArrowDown'){
+      e.preventDefault();
+      cellPickerHighlightIndex = (cellPickerHighlightIndex + 1) % items.length;
+      applyCellPickerHighlight();
+    } else if(e.key === 'ArrowUp'){
+      e.preventDefault();
+      cellPickerHighlightIndex = (cellPickerHighlightIndex - 1 + items.length) % items.length;
+      applyCellPickerHighlight();
+    } else if(e.key === 'Enter'){
+      e.preventDefault();
+      if(cellPickerHighlightIndex >= 0 && items[cellPickerHighlightIndex]){
+        items[cellPickerHighlightIndex].click();
+      }
+    }
+  });
   btnCellPickerSearchClear.addEventListener('click', ()=>{
     cellPickerSearchInput.value = '';
     btnCellPickerSearchClear.hidden = true;
