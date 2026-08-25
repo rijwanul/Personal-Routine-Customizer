@@ -686,6 +686,7 @@ function attachSlotDnD(slot){
 
 let cellPickerTarget = null; // { dayId, timeId }
 let cellPickerAnchorEl = null;
+let cellPickerOpenedAt = 0;
 
 function openCellPicker(dayId, timeId, anchorEl){
   cellPickerTarget = { dayId, timeId };
@@ -702,6 +703,14 @@ function openCellPicker(dayId, timeId, anchorEl){
   picker.hidden = false;
   positionCellPicker(picker, anchorEl);
   if(window.lucide) lucide.createIcons();
+  // Focusing the search input opens the on-screen keyboard on mobile,
+  // which shrinks the visible viewport and fires a `resize` event — the
+  // resize listener below (meant to close the picker if the *user*
+  // resizes their browser window) would otherwise immediately mistake
+  // that keyboard-driven resize for a real one and close the picker the
+  // instant it opens. Recording the open time lets that listener ignore
+  // resizes that happen right after opening.
+  cellPickerOpenedAt = Date.now();
   if(searchInput) searchInput.focus();
 }
 
@@ -2160,7 +2169,13 @@ function wireEvents(){
     if(e.target.closest('#cellPicker') || e.target.closest('.g-slot')) return;
     closeCellPicker();
   });
-  window.addEventListener('resize', ()=>{ if(!document.getElementById('cellPicker').hidden) closeCellPicker(); });
+  window.addEventListener('resize', ()=>{
+    if(document.getElementById('cellPicker').hidden) return;
+    // Ignore the resize fired by the on-screen keyboard opening right
+    // after the picker appears (see comment in openCellPicker).
+    if(Date.now() - cellPickerOpenedAt < 700) return;
+    closeCellPicker();
+  });
 
   // Export menu
   const exportMenu = document.getElementById('exportMenu');
