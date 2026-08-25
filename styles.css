@@ -429,6 +429,10 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
    states are visually true). */
 .course-card.is-filtered-out{ opacity:.2; }
 .course-card.is-filtered-out:hover{ opacity:.5; }
+/* The filtered-IN course should stand out clearly — this overrides even
+   its own "Faded?" setting (--fade-opacity) while a filter is active. */
+.course-card.is-filter-target{ opacity:1; }
+.course-card.is-filter-target:hover{ opacity:1; }
 
 .detail-checkbox-row{
   display:flex; align-items:center; gap:8px;

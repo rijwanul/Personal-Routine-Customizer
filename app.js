@@ -509,11 +509,14 @@ function buildCourseCard(course, placement){
   card.style.color = shadeForText(course.color);
   card.draggable = true;
   card.dataset.placementId = placement.id;
+  const isFilterTarget = bankFilterCourseId && course.id === bankFilterCourseId;
+
   if(placement.skipped){
     card.classList.add('is-skipped');
     card.style.setProperty('--fade-opacity', ((placement.fadeOpacity ?? 40) / 100));
   }
-  if(bankFilterCourseId && course.id !== bankFilterCourseId) card.classList.add('is-filtered-out');
+  if(bankFilterCourseId && !isFilterTarget) card.classList.add('is-filtered-out');
+  if(isFilterTarget) card.classList.add('is-filter-target');
 
   const name = courseTitle(course);
   const sub = [course.courseCode, course.teacherShort || course.teacherName].filter(Boolean).join(' · ');
