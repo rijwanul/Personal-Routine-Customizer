@@ -47,7 +47,7 @@
       <i data-lucide="layout-list"></i>
     </button>
     <button class="btn btn--icon" id="btnSettings" title="Settings" aria-label="Open settings">
-      <i data-lucide="settings-2"></i>
+      <i data-lucide="settings"></i>
     </button>
     <div class="menu-wrap">
       <button class="btn btn--icon" id="btnExport" title="Import / Export" aria-label="Import or export">
@@ -89,6 +89,7 @@
 
   <!-- ============ ROUTINE GRID ============ -->
   <main class="grid-wrap">
+    <div class="live-clock-mobile" id="liveClockMobile"></div>
     <div class="grid-toolbar">
       <div class="grid-toolbar__title" id="gridTitleInline" contenteditable="true" spellcheck="false">Untitled routine</div>
       <div class="grid-toolbar__spacer"></div>
@@ -125,7 +126,7 @@
 <div class="modal-overlay" id="settingsOverlay" hidden>
   <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="modal__head">
-      <h2 id="settingsTitle"><i data-lucide="settings-2"></i> Settings</h2>
+      <h2 id="settingsTitle"><i data-lucide="settings"></i> Settings</h2>
       <button class="btn btn--icon" id="btnCloseSettings" aria-label="Close settings"><i data-lucide="x"></i></button>
     </div>
     <div class="tabs">

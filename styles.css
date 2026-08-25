@@ -270,6 +270,15 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 900px){
   .live-clock{ display:none; }
 }
+.live-clock-mobile{
+  display:none;
+  font-size:12px; font-weight:600; color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  padding: 8px 20px 0;
+}
+@media (max-width: 900px){
+  .live-clock-mobile{ display:block; }
+}
 
 .grid-scroll{ flex:1; overflow:auto; padding: 18px 20px 40px; }
 

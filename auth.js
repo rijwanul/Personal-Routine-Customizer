@@ -190,13 +190,13 @@ function friendlyAuthError(e) {
     return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
   }
   if (code.includes("network-request-failed")) {
-    return "Network error — check your connection and try again.";
+    return "Network error: check your connection and try again.";
   }
   if (code.includes("too-many-requests")) {
     return "Too many attempts. Please wait a moment and try again.";
   }
   if (code.includes("permission-denied") || code.includes("missing-permissions") || /missing or insufficient permissions/i.test((e && e.message) || "")) {
-    return "Server permissions error — please try again in a moment.";
+    return "Server permissions error: please try again in a moment.";
   }
   return "Something went wrong. Please try again.";
 }
@@ -220,7 +220,7 @@ const SYNC_ICONS = {
 const SYNC_TITLES = {
   saved: "Synced to cloud",
   saving: "Saving to cloud…",
-  error: navigator.onLine ? "Could not sync to cloud" : "Offline — not synced to cloud"
+  error: navigator.onLine ? "Could not sync to cloud" : "Offline, not synced to cloud"
 };
 
 function setSyncBadge(state) {
@@ -345,9 +345,13 @@ async function reconcileRoutineAfterAuth(uid, justRegistered) {
     return;
   }
 
-  if (!local || statesLookEqual(cloud, local)) {
-    // Nothing to reconcile — just adopt the cloud copy (covers the "no
-    // local data yet" and "already identical" cases) and start syncing.
+  const localIsUntouched = !local || (window.defaultState && statesLookEqual(local, window.defaultState()));
+
+  if (localIsUntouched || statesLookEqual(cloud, local)) {
+    // Nothing to reconcile — just adopt the cloud copy. Covers: no local
+    // data yet, local is still just the untouched defaults (nothing the
+    // user actually worked on locally is worth protecting), or cloud and
+    // local are already identical.
     if (window.replaceRoutineState) window.replaceRoutineState(cloud);
     startCloudSync(uid);
     return;
@@ -493,7 +497,7 @@ async function handleSubmit() {
   try {
     const { user, created } = await loginOrRegister(uname, pass);
     currentUser = user;
-    if (window.showToast) showToast(created ? `Account created — welcome, ${user.username}.` : `Logged in as ${user.username}.`);
+    if (window.showToast) showToast(created ? `Account created. Welcome, ${user.username}.` : `Logged in as ${user.username}.`);
     await reconcileRoutineAfterAuth(user.uid, created);
     renderSignedInState();
     if (window.lucide) lucide.createIcons();
@@ -512,10 +516,11 @@ async function handleLogout() {
     stopCloudSync();
     currentUser = null;
     renderSignedInState();
-    if (window.showToast) showToast("Logged out.");
+    if (window.resetEverything) window.resetEverything('Logged out. Everything reset.');
+    else if (window.showToast) showToast("Logged out.");
     closeAccountModal();
   } catch (e) {
-    if (window.showToast) showToast("Could not log out — try again.", "error");
+    if (window.showToast) showToast("Could not log out. Try again.", "error");
   }
 }
 
@@ -590,7 +595,7 @@ async function togglePublicShare(on) {
     refreshShareUI();
     if (window.showToast) showToast(on ? "Your import link is live." : "Import link turned off.");
   } catch (e) {
-    error.textContent = "Could not update sharing — please try again.";
+    error.textContent = "Could not update sharing. Please try again.";
     error.hidden = false;
     refreshShareUI(); // revert any checkbox that got ahead of itself
   }
@@ -641,7 +646,7 @@ function wireShareUI() {
       await navigator.clipboard.writeText(link);
       if (window.showToast) showToast("Import link copied.");
     } catch (e) {
-      if (window.showToast) showToast("Could not copy — select and copy manually.", "error");
+      if (window.showToast) showToast("Could not copy. Select and copy manually.", "error");
     }
   });
 }
@@ -769,7 +774,7 @@ function wireImportUI() {
     const { enabledToggle, appendToggle, replaceSettingsToggle, error } = importEls();
     if (!enabledToggle.checked || !pendingImport) { closeImportModal(); return; }
     if (!window.importRoutineState) {
-      error.textContent = "Import isn't available right now — please try again.";
+      error.textContent = "Import isn't available right now. Please try again.";
       error.hidden = false;
       return;
     }
@@ -777,7 +782,7 @@ function wireImportUI() {
     const replaceSettings = replaceSettingsToggle.checked;
     const result = window.importRoutineState(pendingImport.state, { replace: !append, replaceSettings });
     if (!result.error) {
-      const skippedNote = result.skippedPlacements ? ` (${result.skippedPlacements} placement${result.skippedPlacements===1?'':'s'} skipped — no matching day/time)` : "";
+      const skippedNote = result.skippedPlacements ? ` (${result.skippedPlacements} placement${result.skippedPlacements===1?'':'s'} skipped: no matching day/time)` : "";
       if (window.showToast) showToast(`Imported ${result.importedCourses} course${result.importedCourses===1?'':'s'} from ${pendingImport.username}.${skippedNote}`);
     }
     closeImportModal();

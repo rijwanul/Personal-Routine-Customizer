@@ -155,7 +155,7 @@ function saveState(){
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }catch(e){
       console.error('Save failed', e);
-      showToast('Could not save — storage may be full.', 'error');
+      showToast('Could not save: storage may be full.', 'error');
     }
     // Optional hook: if auth.js has loaded and the user is signed in, it
     // registers a listener here to mirror every local save up to Firestore.
@@ -176,6 +176,7 @@ function saveState(){
    Keeping this surface tiny means app.js works completely standalone even
    if auth.js is removed. */
 window.getRoutineState = function(){ return state; };
+window.defaultState = defaultState;
 window.replaceRoutineState = function(newState){
   try{
     state = mergeIntoDefaultState(newState || {});
@@ -671,7 +672,7 @@ function renderCellPickerList(){
   if(state.courses.length === 0){
     const empty = document.createElement('div');
     empty.className = 'cell-picker__empty';
-    empty.textContent = 'No courses in your bank yet — create one below.';
+    empty.textContent = 'No courses in your bank yet. Create one below.';
     list.appendChild(empty);
   } else if(courses.length === 0){
     const empty = document.createElement('div');
@@ -1599,7 +1600,7 @@ function switchTab(tabName){
 function exportTxt(){
   const lines = [];
   lines.push('# MyRoutine Customizer Export');
-  lines.push('# Format: v1 — this file can be re-imported.');
+  lines.push('# Format: v1 - this file can be re-imported.');
   lines.push('');
   lines.push('[META]');
   lines.push('routineName=' + tsvEscape(state.routineName));
@@ -1693,7 +1694,7 @@ async function copyJsonToClipboard(){
       document.execCommand('copy');
       showToast('JSON copied to clipboard.');
     }catch(err){
-      showToast('Could not copy — select the text and copy manually.', 'error');
+      showToast('Could not copy. Select the text and copy manually.', 'error');
     }
   }
 }
@@ -1718,7 +1719,7 @@ function importJsonFromTextarea(){
     showToast('Routine imported.');
   }catch(e){
     console.error(e);
-    showToast('Could not import — unexpected JSON shape.', 'error');
+    showToast('Could not import. Unexpected JSON shape.', 'error');
   }
 }
 
@@ -1728,7 +1729,7 @@ function importTxt(file){
     try{
       const text = reader.result;
       if(/^\[TIMES\]\s*[\r\n]+id\tstart\tend/m.test(text) || !/^\[SLOTFIELDS\]/m.test(text)){
-        showToast('That .txt file is from an older, unsupported version — please re-export or use JSON.', 'error');
+        showToast('That .txt file is from an older, unsupported version. Please re-export or use JSON.', 'error');
         return;
       }
       const parsed = parseTxtExport(text);
@@ -1739,7 +1740,7 @@ function importTxt(file){
       showToast('Routine imported.');
     }catch(e){
       console.error(e);
-      showToast('Could not read that file — is it a valid export?', 'error');
+      showToast('Could not read that file. Is it a valid export?', 'error');
     }
   };
   reader.readAsText(file);
@@ -1975,13 +1976,18 @@ function wireEvents(){
     state.features.editFromGrid = e.target.checked; saveState(); renderGrid();
   });
 
+  window.resetEverything = function(message){
+    state = defaultState(); saveState(); renderAll(); showToast(message || 'Everything reset.');
+  };
+
   document.getElementById('btnClearGrid').addEventListener('click', ()=>{
     if(!confirm('Remove all courses placed on the grid? Your course bank stays intact.')) return;
     state.placements = []; saveState(); renderGrid(); showToast('Grid cleared.');
   });
   document.getElementById('btnResetAll').addEventListener('click', ()=>{
     if(!confirm('Reset everything — days, times, fields, courses, and placements — back to defaults? This cannot be undone.')) return;
-    state = defaultState(); saveState(); renderAll(); closeSettings(); showToast('Everything reset.');
+    resetEverything();
+    closeSettings();
   });
 
   // Inline grid title (kept in sync with settings field)
@@ -2149,8 +2155,13 @@ function formatLiveClock(now){
 let liveClockTimer = null;
 function startLiveClock(){
   const el = document.getElementById('liveClock');
-  if(!el) return;
-  const tick = ()=>{ el.textContent = formatLiveClock(new Date()); };
+  const elMobile = document.getElementById('liveClockMobile');
+  if(!el && !elMobile) return;
+  const tick = ()=>{
+    const text = formatLiveClock(new Date());
+    if(el) el.textContent = text;
+    if(elMobile) elMobile.textContent = text;
+  };
   tick();
   clearInterval(liveClockTimer);
   liveClockTimer = setInterval(tick, 1000);
