@@ -703,15 +703,14 @@ function openCellPicker(dayId, timeId, anchorEl){
   picker.hidden = false;
   positionCellPicker(picker, anchorEl);
   if(window.lucide) lucide.createIcons();
-    // Recording the open time lets the resize listener below (meant to
-  // close the picker if the *user* resizes their browser window) ignore
-  // resizes that happen right after opening — e.g. from a mobile
-  // on-screen keyboard appearing if the user taps the search box.
   cellPickerOpenedAt = Date.now();
-  // Deliberately NOT auto-focusing the search input here: doing so pops
-  // the mobile keyboard open immediately, which shrinks the screen and
-  // can make the freshly-opened picker feel like it's misbehaving. The
-  // user can tap the search box themselves if they want to type.
+  // Auto-focus on desktop (no virtual keyboard, so no downside) but not
+  // on touch devices — there, auto-focusing pops the on-screen keyboard
+  // open immediately, shrinking the screen and making the freshly-opened
+  // picker feel like it's misbehaving. Touch users can tap the search
+  // box themselves if they want to type.
+  const isTouchDevice = window.matchMedia('(hover: none)').matches;
+  if(searchInput && !isTouchDevice) searchInput.focus();
 }
 
 function renderCellPickerList(){
