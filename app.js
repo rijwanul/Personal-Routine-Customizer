@@ -703,15 +703,15 @@ function openCellPicker(dayId, timeId, anchorEl){
   picker.hidden = false;
   positionCellPicker(picker, anchorEl);
   if(window.lucide) lucide.createIcons();
-  // Focusing the search input opens the on-screen keyboard on mobile,
-  // which shrinks the visible viewport and fires a `resize` event — the
-  // resize listener below (meant to close the picker if the *user*
-  // resizes their browser window) would otherwise immediately mistake
-  // that keyboard-driven resize for a real one and close the picker the
-  // instant it opens. Recording the open time lets that listener ignore
-  // resizes that happen right after opening.
+    // Recording the open time lets the resize listener below (meant to
+  // close the picker if the *user* resizes their browser window) ignore
+  // resizes that happen right after opening — e.g. from a mobile
+  // on-screen keyboard appearing if the user taps the search box.
   cellPickerOpenedAt = Date.now();
-  if(searchInput) searchInput.focus();
+  // Deliberately NOT auto-focusing the search input here: doing so pops
+  // the mobile keyboard open immediately, which shrinks the screen and
+  // can make the freshly-opened picker feel like it's misbehaving. The
+  // user can tap the search box themselves if they want to type.
 }
 
 function renderCellPickerList(){
@@ -2170,10 +2170,16 @@ function wireEvents(){
     closeCellPicker();
   });
   window.addEventListener('resize', ()=>{
-    if(document.getElementById('cellPicker').hidden) return;
-    // Ignore the resize fired by the on-screen keyboard opening right
-    // after the picker appears (see comment in openCellPicker).
-    if(Date.now() - cellPickerOpenedAt < 700) return;
+    const picker = document.getElementById('cellPicker');
+    if(picker.hidden) return;
+    // A mobile on-screen keyboard opening/closing also fires `resize`
+    // (it shrinks/grows the visible viewport). That's not the "user
+    // resized their browser window" case this listener exists for, so
+    // skip closing whenever the picker's own search input currently has
+    // focus — that's the reliable signal a keyboard, not a real window
+    // resize, caused this.
+    const searchInput = document.getElementById('cellPickerSearchInput');
+    if(document.activeElement === searchInput) return;
     closeCellPicker();
   });
 
