@@ -405,6 +405,17 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   position:relative;
 }
 .course-card:hover{ transform: translateY(-1px); box-shadow: var(--shadow-md); }
+/* Classes marked "Faded?" reduce visual weight without hiding them
+   entirely — still fully visible and clickable, just deprioritized. */
+.course-card.is-skipped{ opacity:.4; }
+.course-card.is-skipped:hover{ opacity:.7; }
+
+.detail-checkbox-row{
+  display:flex; align-items:center; gap:8px;
+  font-size:13px; font-weight:600; color:var(--ink);
+  margin-top:12px; cursor:pointer;
+}
+.detail-checkbox-row input[type="checkbox"]{ width:17px; height:17px; accent-color: var(--accent); cursor:pointer; }
 .course-card.drop-before{ box-shadow: inset 0 2px 0 var(--accent); }
 .course-card.drop-after{ box-shadow: inset 0 -2px 0 var(--accent); }
 .course-card__name{ font-weight:700; font-size:12.5px; line-height:1.25; }
@@ -692,6 +703,7 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 /* Card detail modal */
 .detail-grid{ display:flex; flex-direction:column; gap:10px; }
 .detail-item{ display:flex; gap:10px; align-items:flex-start; }
+.detail-item input[type="checkbox"]{ width:19px; height:19px; accent-color: var(--accent); flex:none; cursor:pointer; }
 .detail-item svg{ width:16px; height:16px; color: var(--accent); flex:none; margin-top:2px; }
 .detail-item .detail-label{ font-size:10.5px; color: var(--ink-faint); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
 .detail-item .detail-value{ font-size:13.5px; color: var(--ink); font-weight:500; }

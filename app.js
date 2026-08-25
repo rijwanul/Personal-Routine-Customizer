@@ -509,6 +509,7 @@ function buildCourseCard(course, placement){
   card.style.color = shadeForText(course.color);
   card.draggable = true;
   card.dataset.placementId = placement.id;
+  if(placement.skipped) card.classList.add('is-skipped');
 
   const name = courseTitle(course);
   const sub = [course.courseCode, course.teacherShort || course.teacherName].filter(Boolean).join(' · ');
@@ -864,7 +865,7 @@ function removeUnusedCourses(){
    drag-drop, the '+' icon popover, and clicking an empty cell. */
 function makeNewPlacement(courseId, dayId, timeId){
   const course = courseById(courseId);
-  const p = { id: uid('pl'), courseId, dayId, timeId };
+  const p = { id: uid('pl'), courseId, dayId, timeId, skipped: false };
   state.slotFields.forEach(f=>{
     p[f.key] = (f.key === 'room' && course?.defaultRoom) ? course.defaultRoom : '';
   });
@@ -1225,6 +1226,10 @@ function openCardDetail(course, placement){
           <div class="color-swatches" id="detailColorSwatches" style="margin-top:6px"></div>
         </div>
       </div>
+      <label class="detail-checkbox-row">
+        <input type="checkbox" id="detailAttendToggle" ${placement.skipped ? 'checked' : ''}>
+        Faded?
+      </label>
     </div>
   `;
 
@@ -1243,6 +1248,12 @@ function openCardDetail(course, placement){
       renderBank();
     });
     swatchWrap.appendChild(sw);
+  });
+
+  document.getElementById('detailAttendToggle').addEventListener('change', (e)=>{
+    placement.skipped = e.target.checked;
+    saveState();
+    renderGrid();
   });
 
   document.getElementById('cardDetailOverlay').hidden = false;
