@@ -578,7 +578,7 @@ function buildCourseCard(course, placement){
 function duplicatePlacement(placementId){
   const p = state.placements.find(pl=>pl.id===placementId);
   if(!p) return;
-  const copy = { id: uid('pl'), courseId: p.courseId, dayId: p.dayId, timeId: p.timeId };
+  const copy = { id: uid('pl'), courseId: p.courseId, dayId: p.dayId, timeId: p.timeId, skipped: p.skipped || false };
   state.slotFields.forEach(f=>{ copy[f.key] = p[f.key] || ''; });
   state.placements.push(copy);
   saveState();
