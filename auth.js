@@ -435,6 +435,8 @@ function renderSignedInState() {
     btnShare.title = currentUser ? "Share / import link" : "Login required to share routine";
   }
   if (settingsRow) settingsRow.hidden = !currentUser;
+  const changePasswordSection = document.getElementById("changePasswordSection");
+  if (changePasswordSection) changePasswordSection.hidden = !currentUser;
 }
 
 function openAccountModal() {
@@ -510,6 +512,65 @@ async function handleSubmit() {
   }
 }
 
+async function handleChangePassword() {
+  const currentPw = document.getElementById("currentPasswordForChange");
+  const p1 = document.getElementById("newPassword1");
+  const p2 = document.getElementById("newPassword2");
+  const error = document.getElementById("changePasswordError");
+  const btn = document.getElementById("btnChangePassword");
+  error.hidden = true;
+
+  if (!currentUser) return;
+
+  if (!currentPw.value) {
+    error.textContent = "Please enter your current password.";
+    error.hidden = false;
+    return;
+  }
+  if (!p1.value || p1.value.length < PASSWORD_MIN_LENGTH) {
+    error.textContent = `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+    error.hidden = false;
+    return;
+  }
+  if (p1.value !== p2.value) {
+    error.textContent = "Passwords don't match.";
+    error.hidden = false;
+    return;
+  }
+
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = "Updating…";
+  try {
+    const { auth, authMod } = await loadFirebase();
+    if (!auth.currentUser) throw new Error("You're not signed in.");
+
+    // Re-authenticating right before updatePassword refreshes Firebase's
+    // "recently signed in" timestamp, which sidesteps the
+    // auth/requires-recent-login error that updatePassword alone would
+    // otherwise throw on an older session.
+    const credential = authMod.EmailAuthProvider.credential(auth.currentUser.email, currentPw.value);
+    await authMod.reauthenticateWithCredential(auth.currentUser, credential);
+
+    await authMod.updatePassword(auth.currentUser, p1.value);
+    currentPw.value = "";
+    p1.value = "";
+    p2.value = "";
+    if (window.showToast) showToast("Password updated.");
+  } catch (e) {
+    if (e && (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential")) {
+      error.textContent = "Current password is incorrect.";
+    } else {
+      error.textContent = friendlyAuthError(e) || "Could not update password. Please try again.";
+    }
+    error.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
 async function handleLogout() {
   try {
     await logoutAccount();
@@ -533,6 +594,14 @@ function wireAccountUI() {
   overlay.addEventListener("click", (e) => { if (e.target.id === "accountOverlay") closeAccountModal(); });
   btnSubmit.addEventListener("click", handleSubmit);
   btnLogout.addEventListener("click", handleLogout);
+  const btnChangePassword = document.getElementById("btnChangePassword");
+  if (btnChangePassword) btnChangePassword.addEventListener("click", handleChangePassword);
+  ["currentPasswordForChange", "newPassword1", "newPassword2"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleChangePassword();
+    });
+  });
   btnKeepCloud.addEventListener("click", () => resolveConflict("cloud"));
   btnKeepLocal.addEventListener("click", () => resolveConflict("local"));
   [username, password].forEach(inp => {

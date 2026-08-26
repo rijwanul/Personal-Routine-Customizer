@@ -273,6 +273,27 @@
         <button class="btn" id="btnClearGrid"><i data-lucide="eraser"></i> Clear grid placements</button>
         <button class="btn btn--danger" id="btnResetAll"><i data-lucide="trash-2"></i> Reset everything</button>
       </div>
+
+      <div id="changePasswordSection" hidden style="margin-top:18px">
+        <div class="detail-divider" style="margin-bottom:14px"></div>
+        <p class="panel-desc" style="font-weight:600; color:var(--ink)"><i data-lucide="key-round"></i> Change password</p>
+        <div class="form-field">
+          <label for="currentPasswordForChange">Current password</label>
+          <input type="password" id="currentPasswordForChange" autocomplete="current-password" placeholder="Your current password">
+        </div>
+        <div class="form-field">
+          <label for="newPassword1">New password</label>
+          <input type="password" id="newPassword1" autocomplete="new-password" placeholder="At least 6 characters">
+        </div>
+        <div class="form-field">
+          <label for="newPassword2">Confirm new password</label>
+          <input type="password" id="newPassword2" autocomplete="new-password" placeholder="Re-enter new password">
+        </div>
+        <p class="account-error" id="changePasswordError" hidden></p>
+        <div class="data-actions" style="margin-top:14px">
+          <button class="btn btn--accent" id="btnChangePassword"><i data-lucide="key-round"></i> Update password</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
