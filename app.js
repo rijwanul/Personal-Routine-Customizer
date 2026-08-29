@@ -67,6 +67,8 @@ function defaultState(){
     slotFields: JSON.parse(JSON.stringify(DEFAULT_SLOT_FIELDS)),
     courses: [],        // {id, color, [fieldKey]: value, ...}
     placements: [],      // {id, courseId, dayId, timeId, [slotFieldKey]: value, ...}
+    teacherData: {},     // { [shortcode]: { name, mobile } } — lookup table for autofill
+    courseData: {},      // { [courseCode]: { name } } — lookup table for autofill
     features: {
       rightClickDelete: true,
       confirmBeforeDelete: true,
@@ -1020,6 +1022,7 @@ function openCourseEditor(courseId, placeIntoSlot){
 
   document.getElementById('courseOverlay').hidden = false;
   if(window.lucide) lucide.createIcons();
+  wireLookupAutofill();
 }
 
 function closeCourseEditor(){
@@ -2112,6 +2115,91 @@ async function clearOfflineCache(){
   }
 }
 
+/* ---------- Teacher Data / Course Data lookup tables (Data tab) ---------- */
+
+function openLookupDataModal(kind){
+  // kind: 'teacher' | 'course'
+  const data = kind === 'teacher' ? state.teacherData : state.courseData;
+  const textarea = document.getElementById(kind === 'teacher' ? 'teacherDataTextarea' : 'courseDataTextarea');
+  const error = document.getElementById(kind === 'teacher' ? 'teacherDataError' : 'courseDataError');
+  const overlay = document.getElementById(kind === 'teacher' ? 'teacherDataOverlay' : 'courseDataOverlay');
+
+  const hasData = data && Object.keys(data).length > 0;
+  const skeleton = kind === 'teacher'
+    ? { "SHZ": { "name": "Dr. Jane Doe", "mobile": "01700000000" } }
+    : { "CSE-4744": { "name": "Computer Security" } };
+
+  textarea.value = JSON.stringify(hasData ? data : skeleton, null, 2);
+  error.hidden = true;
+  overlay.hidden = false;
+  if(window.lucide) lucide.createIcons();
+}
+
+function closeLookupDataModal(kind){
+  document.getElementById(kind === 'teacher' ? 'teacherDataOverlay' : 'courseDataOverlay').hidden = true;
+}
+
+function saveLookupDataModal(kind){
+  const textarea = document.getElementById(kind === 'teacher' ? 'teacherDataTextarea' : 'courseDataTextarea');
+  const error = document.getElementById(kind === 'teacher' ? 'teacherDataError' : 'courseDataError');
+  let parsed;
+  try{
+    parsed = JSON.parse(textarea.value);
+  }catch(e){
+    error.textContent = 'Invalid JSON: ' + e.message;
+    error.hidden = false;
+    return;
+  }
+  if(typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)){
+    error.textContent = 'JSON must be an object keyed by ' + (kind === 'teacher' ? 'teacher shortcode' : 'course code') + '.';
+    error.hidden = false;
+    return;
+  }
+  // Light shape validation — keep whatever keys are present per entry, but
+  // make sure each entry itself is a plain object (not a string/number),
+  // so downstream autofill lookups don't crash on malformed data.
+  for(const key in parsed){
+    if(typeof parsed[key] !== 'object' || parsed[key] === null || Array.isArray(parsed[key])){
+      error.textContent = `Entry "${key}" must be an object, e.g. ${kind === 'teacher' ? '{ "name": "...", "mobile": "..." }' : '{ "name": "..." }'}.`;
+      error.hidden = false;
+      return;
+    }
+  }
+
+  if(kind === 'teacher') state.teacherData = parsed;
+  else state.courseData = parsed;
+
+  saveState();
+  closeLookupDataModal(kind);
+  showToast((kind === 'teacher' ? 'Teacher' : 'Course') + ' data saved.');
+}
+
+/* Wires autofill: typing an exact-match shortcode/code into the course
+   editor form fills sibling fields, but only if they're currently empty
+   (never overwrites data the user already entered/is editing). */
+function wireLookupAutofill(){
+  const shortInput = document.getElementById('cf_teacherShort');
+  if(shortInput){
+    shortInput.addEventListener('input', ()=>{
+      const entry = state.teacherData[shortInput.value];
+      if(!entry) return;
+      const nameInput = document.getElementById('cf_teacherName');
+      const mobileInput = document.getElementById('cf_teacherMobile');
+      if(nameInput && !nameInput.value && entry.name) nameInput.value = entry.name;
+      if(mobileInput && !mobileInput.value && entry.mobile) mobileInput.value = entry.mobile;
+    });
+  }
+  const codeInput = document.getElementById('cf_courseCode');
+  if(codeInput){
+    codeInput.addEventListener('input', ()=>{
+      const entry = state.courseData[codeInput.value];
+      if(!entry) return;
+      const nameInput = document.getElementById('cf_courseName');
+      if(nameInput && !nameInput.value && entry.name) nameInput.value = entry.name;
+    });
+  }
+}
+
 function wireEvents(){
   // Bank toggle
   document.getElementById('btnBank').addEventListener('click', ()=>{
@@ -2168,12 +2256,24 @@ function wireEvents(){
     if(!confirm('Remove all courses placed on the grid? Your course bank stays intact.')) return;
     state.placements = []; saveState(); renderGrid(); showToast('Grid cleared.');
   });
-  document.getElementById('btnResetAll').addEventListener('click', ()=>{
+document.getElementById('btnResetAll').addEventListener('click', ()=>{
     if(!confirm('Reset everything - days, times, fields, courses, and placements — back to defaults? This cannot be undone.')) return;
     resetEverything();
     closeSettings();
   });
   document.getElementById('btnClearCache').addEventListener('click', clearOfflineCache);
+
+  document.getElementById('btnOpenTeacherData').addEventListener('click', ()=> openLookupDataModal('teacher'));
+  document.getElementById('btnCloseTeacherData').addEventListener('click', ()=> closeLookupDataModal('teacher'));
+  document.getElementById('btnCancelTeacherData').addEventListener('click', ()=> closeLookupDataModal('teacher'));
+  document.getElementById('btnSaveTeacherData').addEventListener('click', ()=> saveLookupDataModal('teacher'));
+  document.getElementById('teacherDataOverlay').addEventListener('click', (e)=>{ if(e.target.id==='teacherDataOverlay') closeLookupDataModal('teacher'); });
+
+  document.getElementById('btnOpenCourseData').addEventListener('click', ()=> openLookupDataModal('course'));
+  document.getElementById('btnCloseCourseData').addEventListener('click', ()=> closeLookupDataModal('course'));
+  document.getElementById('btnCancelCourseData').addEventListener('click', ()=> closeLookupDataModal('course'));
+  document.getElementById('btnSaveCourseData').addEventListener('click', ()=> saveLookupDataModal('course'));
+  document.getElementById('courseDataOverlay').addEventListener('click', (e)=>{ if(e.target.id==='courseDataOverlay') closeLookupDataModal('course'); });
 
   // Inline grid title (kept in sync with settings field)
   const gridTitle = document.getElementById('gridTitleInline');

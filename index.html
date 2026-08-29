@@ -280,6 +280,13 @@
         <button class="btn" id="btnClearCache"><i data-lucide="trash-2"></i> Clear cache</button>
       </div>
 
+      <div class="detail-divider" style="margin:14px 0"></div>
+      <p class="panel-desc">Save reusable lookup data. Course/teacher editor fields will autofill from these when a shortcode or course code matches.</p>
+      <div class="data-actions">
+        <button class="btn" id="btnOpenTeacherData"><i data-lucide="users"></i> Teacher Data (JSON)</button>
+        <button class="btn" id="btnOpenCourseData"><i data-lucide="book-open"></i> Course Data (JSON)</button>
+      </div>
+
       <div id="changePasswordSection" hidden style="margin-top:18px">
         <div class="detail-divider" style="margin-bottom:14px"></div>
         <p class="panel-desc" style="font-weight:600; color:var(--ink)"><i data-lucide="key-round"></i> Change password</p>
@@ -356,6 +363,46 @@
       <div class="modal__spacer"></div>
       <button class="btn" id="btnCancelJson">Cancel</button>
       <button class="btn btn--accent" id="btnImportJson"><i data-lucide="upload"></i> Import from text</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TEACHER DATA JSON MODAL ============ -->
+<div class="modal-overlay" id="teacherDataOverlay" hidden>
+  <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="teacherDataModalTitle">
+    <div class="modal__head">
+      <h2 id="teacherDataModalTitle"><i data-lucide="users"></i> Teacher Data</h2>
+      <button class="btn btn--icon" id="btnCloseTeacherData" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body">
+      <p class="bank__hint" style="margin-top:0">Keyed by teacher shortcode. Typing a matching shortcode in a course's "Teacher Shortcode" field will autofill the name and mobile number below, if those fields are still empty.</p>
+      <textarea id="teacherDataTextarea" class="json-textarea" spellcheck="false"></textarea>
+      <p class="account-error" id="teacherDataError" hidden></p>
+    </div>
+    <div class="modal__foot">
+      <button class="btn" id="btnCancelTeacherData">Cancel</button>
+      <div class="modal__spacer"></div>
+      <button class="btn btn--accent" id="btnSaveTeacherData"><i data-lucide="save"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ COURSE DATA JSON MODAL ============ -->
+<div class="modal-overlay" id="courseDataOverlay" hidden>
+  <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="courseDataModalTitle">
+    <div class="modal__head">
+      <h2 id="courseDataModalTitle"><i data-lucide="book-open"></i> Course Data</h2>
+      <button class="btn btn--icon" id="btnCloseCourseData" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body">
+      <p class="bank__hint" style="margin-top:0">Keyed by course code. Typing a matching code in a course's "Course Code" field will autofill the course name below, if that field is still empty.</p>
+      <textarea id="courseDataTextarea" class="json-textarea" spellcheck="false"></textarea>
+      <p class="account-error" id="courseDataError" hidden></p>
+    </div>
+    <div class="modal__foot">
+      <button class="btn" id="btnCancelCourseData">Cancel</button>
+      <div class="modal__spacer"></div>
+      <button class="btn btn--accent" id="btnSaveCourseData"><i data-lucide="save"></i> Save</button>
     </div>
   </div>
 </div>
