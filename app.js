@@ -137,6 +137,19 @@ function mergeFieldList(defaultList, savedList){
   return merged;
 }
 
+/* Used by append-mode import: adds any field from importedList whose 'key'
+   isn't already present in localList, appended at the end. Unlike
+   mergeFieldList, this never reorders or overwrites a local field that
+   shares a key with an imported one — it's a pure additive merge, since
+   append-mode import should never silently change your existing fields. */
+function appendNewFieldsByKey(localList, importedList){
+  if(!Array.isArray(importedList)) return localList;
+  const localKeys = new Set(localList.map(f=>f.key));
+  const additions = importedList.filter(f=> f && f.key && !localKeys.has(f.key))
+    .map(f=> Object.assign({}, f, { custom: true }));
+  return additions.length ? localList.concat(additions) : localList;
+}
+
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -207,7 +220,16 @@ window.replaceRoutineState = function(newState){
     matching day/time LABEL (e.g. imported "Sun" placement -> whichever
     local day is labeled "Sun"). Any placement with no matching label is
     dropped rather than silently corrupting the grid, and the user is told
-    how many were skipped. */
+    how many were skipped.
+
+    In append mode (replace=false), even when replaceSettings is also
+    false, these are still merged in additively rather than dropped:
+      - fields / slotFields: any imported field whose 'key' isn't already
+        in your local list is appended at the end. Fields you already have
+        are left completely untouched (no reordering, no overwriting).
+      - teacherData / courseData: any imported shortcode/course-code entry
+        not already in your local lookup table is added. An entry you
+        already have for that key is never overwritten by theirs. */
 window.importRoutineState = function(importedState, { replace, replaceSettings }){
   try{
     const imported = mergeIntoDefaultState(importedState || {});
@@ -225,7 +247,26 @@ window.importRoutineState = function(importedState, { replace, replaceSettings }
       state.fields = imported.fields;
       state.accent = imported.accent;
       state.density = imported.density;
+    } else {
+      // Not replacing settings wholesale, but fields/slotFields are
+      // key-addressable lists — append any imported field whose key
+      // doesn't already exist locally (e.g. a custom field they added),
+      // keeping your own fields/order untouched and never overwriting a
+      // local field that shares a key with one of theirs.
+      state.fields = appendNewFieldsByKey(state.fields, imported.fields);
+      state.slotFields = appendNewFieldsByKey(state.slotFields, imported.slotFields);
     }
+
+    // teacherData/courseData are lookup tables keyed by shortcode/course
+    // code. Merge in any imported entries whose key doesn't already exist
+    // locally — additive only, never overwrites a local entry for a key
+    // you already have.
+    Object.keys(imported.teacherData || {}).forEach(key=>{
+      if(!(key in state.teacherData)) state.teacherData[key] = imported.teacherData[key];
+    });
+    Object.keys(imported.courseData || {}).forEach(key=>{
+      if(!(key in state.courseData)) state.courseData[key] = imported.courseData[key];
+    });
 
     // Map imported course/day/time IDs -> new IDs in the current state, so
     // nothing collides with what's already here.
@@ -1734,6 +1775,9 @@ function exportTxt(){
   lines.push('density=' + state.density);
   lines.push('rightClickDelete=' + !!state.features?.rightClickDelete);
   lines.push('confirmBeforeDelete=' + !!state.features?.confirmBeforeDelete);
+  lines.push('clickEmptyCellToAdd=' + !!state.features?.clickEmptyCellToAdd);
+  lines.push('bulkAddCourses=' + !!state.features?.bulkAddCourses);
+  lines.push('editFromGrid=' + !!state.features?.editFromGrid);
   lines.push('');
 
   lines.push('[DAYS]');
@@ -1769,6 +1813,25 @@ function exportTxt(){
   lines.push(['id','courseId','dayId','timeId', ...slotFieldKeys].join('\t'));
   state.placements.forEach(p=>{
     lines.push([p.id, p.courseId, p.dayId, p.timeId, ...slotFieldKeys.map(k=> tsvEscape(p[k]||''))].join('\t'));
+  });
+  lines.push('');
+
+  // teacherData/courseData are lookup tables ({ [key]: {...fields} }), not
+  // arrays — flatten each entry to one row with its key as the first
+  // column so the TSV shape stays consistent with the other sections.
+  lines.push('[TEACHERDATA]');
+  lines.push('shortcode\tname\tmobile');
+  Object.keys(state.teacherData || {}).forEach(shortcode=>{
+    const t = state.teacherData[shortcode] || {};
+    lines.push([tsvEscape(shortcode), tsvEscape(t.name||''), tsvEscape(t.mobile||'')].join('\t'));
+  });
+  lines.push('');
+
+  lines.push('[COURSEDATA]');
+  lines.push('courseCode\tname');
+  Object.keys(state.courseData || {}).forEach(code=>{
+    const c = state.courseData[code] || {};
+    lines.push([tsvEscape(code), tsvEscape(c.name||'')].join('\t'));
   });
 
   const blob = new Blob([lines.join('\n')], { type:'text/plain' });
@@ -1875,6 +1938,7 @@ function importTxt(file){
 function parseTxtExport(text){
   const s = defaultState();
   s.days = []; s.times = []; s.fields = []; s.slotFields = []; s.courses = []; s.placements = [];
+  s.teacherData = {}; s.courseData = {};
 
   const lines = text.split(/\r?\n/);
   let section = null;
@@ -1896,6 +1960,9 @@ function parseTxtExport(text){
       else if(key==='density') s.density = val;
       else if(key==='rightClickDelete') s.features.rightClickDelete = val === 'true';
       else if(key==='confirmBeforeDelete') s.features.confirmBeforeDelete = val === 'true';
+      else if(key==='clickEmptyCellToAdd') s.features.clickEmptyCellToAdd = val === 'true';
+      else if(key==='bulkAddCourses') s.features.bulkAddCourses = val === 'true';
+      else if(key==='editFromGrid') s.features.editFromGrid = val === 'true';
       continue;
     }
 
@@ -1926,6 +1993,12 @@ function parseTxtExport(text){
       const p = { id: row.id, courseId: row.courseId, dayId: row.dayId, timeId: row.timeId };
       header.slice(4).forEach(k=> p[k] = tsvUnescape(row[k]));
       s.placements.push(p);
+    } else if(section === 'TEACHERDATA'){
+      if(!row.shortcode) continue;
+      s.teacherData[tsvUnescape(row.shortcode)] = { name: tsvUnescape(row.name||''), mobile: tsvUnescape(row.mobile||'') };
+    } else if(section === 'COURSEDATA'){
+      if(!row.courseCode) continue;
+      s.courseData[tsvUnescape(row.courseCode)] = { name: tsvUnescape(row.name||'') };
     }
   }
 
