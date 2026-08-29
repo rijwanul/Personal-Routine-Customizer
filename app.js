@@ -816,9 +816,37 @@ function renderCellPickerList(){
   }
 
   applyCellPickerHighlight();
+  renderCellPickerCreateBtn(query);
 
   const picker = document.getElementById('cellPicker');
   if(!picker.hidden && cellPickerAnchorEl) positionCellPicker(picker, cellPickerAnchorEl);
+}
+
+/* Shows/hides the "Create & Add "abcd…" course" button above the "New
+   course for this slot" button, based on the current search text — shown
+   any time there's typed text, regardless of whether it matches an
+   existing course, so the user can always spin off a new/similar course. */
+function renderCellPickerCreateBtn(query){
+  const trimmed = query.trim();
+  let btn = document.getElementById('btnCellPickerCreateFromSearch');
+  if(!trimmed){
+    if(btn) btn.remove();
+    return;
+  }
+  const truncated = trimmed.length > 4 ? trimmed.slice(0,4) + '…' : trimmed;
+  const label = `Create & Add "${truncated}" course`;
+  if(!btn){
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'btnCellPickerCreateFromSearch';
+    btn.className = 'cell-picker__newbtn';
+    const newCourseBtn = document.getElementById('btnCellPickerNew');
+    newCourseBtn.insertAdjacentElement('beforebegin', btn);
+    btn.addEventListener('click', ()=> openCourseEditorForCell(btn.dataset.typedValue || ''));
+  }
+  btn.dataset.typedValue = trimmed;
+  btn.innerHTML = `<i data-lucide="plus-circle"></i> <span>${escapeHtml(label)}</span>`;
+  if(window.lucide) lucide.createIcons();
 }
 
 function positionCellPicker(picker, anchorEl){
@@ -840,11 +868,18 @@ function closeCellPicker(){
   cellPickerAnchorEl = null;
 }
 
-function openCourseEditorForCell(){
+function openCourseEditorForCell(prefillText){
   if(!cellPickerTarget) return;
   const target = cellPickerTarget;
   closeCellPicker();
-  openCourseEditor(null, target);
+  let prefill = null;
+  if(prefillText){
+    // Prefill whichever of courseName/courseCode sits first in the
+    // user's course-fields order (both are core fields, always present).
+    const firstKey = state.fields.find(f=> f.key === 'courseName' || f.key === 'courseCode')?.key || 'courseName';
+    prefill = { [firstKey]: prefillText };
+  }
+  openCourseEditor(null, target, prefill);
 }
 
 /* =========================================================================
@@ -989,7 +1024,7 @@ function addCourseToSlot(courseId, dayId, timeId){
 let editingCourseId = null;
 let pendingPlacementTarget = null; // { dayId, timeId } — set when created via the '+' cell picker
 
-function openCourseEditor(courseId, placeIntoSlot){
+function openCourseEditor(courseId, placeIntoSlot, prefill){
   editingCourseId = courseId || null;
   pendingPlacementTarget = placeIntoSlot || null;
   const course = courseId ? courseById(courseId) : null;
@@ -1001,12 +1036,16 @@ function openCourseEditor(courseId, placeIntoSlot){
   const more = moreFields();
   const colorVal = course?.color || COURSE_PALETTE[state.courses.length % COURSE_PALETTE.length];
 
+  // For a brand-new course only (no `course`), `prefill` can seed one
+  // field's value — used by the cell picker's "Create & Add" button.
+  const fieldValue = (f)=> course?.[f.key] || (!course && prefill?.[f.key]) || '';
+
   const fieldHtml = (f)=>`
     <div class="form-field">
       <label for="cf_${f.key}">${escapeHtml(f.label)}</label>
       ${f.type === 'textarea'
-        ? `<textarea id="cf_${f.key}" data-key="${f.key}">${escapeHtml(course?.[f.key] || '')}</textarea>`
-        : `<input type="${f.type==='tel'?'tel':'text'}" id="cf_${f.key}" data-key="${f.key}" value="${escapeHtml(course?.[f.key] || '')}">`
+        ? `<textarea id="cf_${f.key}" data-key="${f.key}">${escapeHtml(fieldValue(f))}</textarea>`
+        : `<input type="${f.type==='tel'?'tel':'text'}" id="cf_${f.key}" data-key="${f.key}" value="${escapeHtml(fieldValue(f))}">`
       }
     </div>
   `;
@@ -2406,7 +2445,7 @@ document.getElementById('btnResetAll').addEventListener('click', ()=>{
 
   // Cell course picker (the '+' icon / empty-cell click popover)
   document.getElementById('btnCloseCellPicker').addEventListener('click', closeCellPicker);
-  document.getElementById('btnCellPickerNew').addEventListener('click', openCourseEditorForCell);
+  document.getElementById('btnCellPickerNew').addEventListener('click', ()=> openCourseEditorForCell());
   const cellPickerSearchInput = document.getElementById('cellPickerSearchInput');
   const btnCellPickerSearchClear = document.getElementById('btnCellPickerSearchClear');
   cellPickerSearchInput.addEventListener('input', ()=>{
