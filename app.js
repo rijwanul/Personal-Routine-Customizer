@@ -1706,6 +1706,8 @@ function openSettings(){
   document.getElementById('setBulkAddCourses').checked = !!state.features?.bulkAddCourses;
   document.getElementById('setEditFromGrid').checked = !!state.features?.editFromGrid;
   document.getElementById('settingsOverlay').hidden = false;
+  refreshCacheSizeLabel();
+  updateOfflineBadge();
 }
 function closeSettings(){ document.getElementById('settingsOverlay').hidden = true; }
 
@@ -2049,6 +2051,67 @@ function renderAll(){
   renderGrid();
 }
 
+/* ---------- Offline cache size / clear (Data tab) ---------- */
+
+function formatBytes(bytes){
+  if(!bytes || bytes <= 0) return '0 KB';
+  const units = ['B','KB','MB','GB'];
+  let i = 0;
+  while(bytes >= 1024 && i < units.length - 1){ bytes /= 1024; i++; }
+  return `${bytes.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+async function refreshCacheSizeLabel(){
+  const label = document.getElementById('cacheSizeLabel');
+  if(!label) return;
+  try{
+    if(navigator.storage && navigator.storage.estimate){
+      const { usage } = await navigator.storage.estimate();
+      label.textContent = formatBytes(usage || 0);
+    } else {
+      label.textContent = 'Unavailable in this browser';
+    }
+  }catch(e){
+    label.textContent = 'Unavailable';
+  }
+}
+
+async function clearOfflineCache(){
+  if(!navigator.onLine){
+    showToast("Can't clear cache while offline.", 'error');
+    return;
+  }
+  if(!confirm('Clear the offline cache? The page will reload afterward to rebuild it. Your routine data is not affected.')) return;
+  const btn = document.getElementById('btnClearCache');
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'Clearing…';
+  try{
+    if(window.caches){
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    // Also drop the service worker registration so a fresh one installs
+    // and rebuilds the app-shell cache cleanly, rather than an old worker
+    // instance re-populating the cache we just cleared.
+    if(navigator.serviceWorker){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    showToast('Cache cleared. Reloading…');
+    // Reload shortly after so the browser immediately refetches and the
+    // new service worker repopulates the cache, rather than leaving the
+    // app running "uncached" until the user's next visit.
+    setTimeout(()=> window.location.reload(), 2000);
+  }catch(e){
+    console.error('Clear cache failed', e);
+    showToast('Could not clear cache.', 'error');
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+    if(window.lucide) lucide.createIcons();
+  }
+}
+
 function wireEvents(){
   // Bank toggle
   document.getElementById('btnBank').addEventListener('click', ()=>{
@@ -2106,10 +2169,11 @@ function wireEvents(){
     state.placements = []; saveState(); renderGrid(); showToast('Grid cleared.');
   });
   document.getElementById('btnResetAll').addEventListener('click', ()=>{
-    if(!confirm('Reset everything — days, times, fields, courses, and placements — back to defaults? This cannot be undone.')) return;
+    if(!confirm('Reset everything - days, times, fields, courses, and placements — back to defaults? This cannot be undone.')) return;
     resetEverything();
     closeSettings();
   });
+  document.getElementById('btnClearCache').addEventListener('click', clearOfflineCache);
 
   // Inline grid title (kept in sync with settings field)
   const gridTitle = document.getElementById('gridTitleInline');
@@ -2325,8 +2389,17 @@ function startLiveClock(){
 
 function updateOfflineBadge(){
   const badge = document.getElementById('offlineBadge');
-  if(!badge) return;
-  badge.hidden = navigator.onLine;
+  if(badge) badge.hidden = navigator.onLine;
+
+  // Clearing the offline cache while offline would leave the app with no
+  // cached assets and no network to refetch them from, so disable it
+  // whenever the browser reports itself offline.
+  const btnClearCache = document.getElementById('btnClearCache');
+  if(btnClearCache){
+    btnClearCache.disabled = !navigator.onLine;
+    btnClearCache.title = navigator.onLine ? '' : "Can't clear cache while offline";
+  }
+
   if(window.lucide) lucide.createIcons();
 }
 
