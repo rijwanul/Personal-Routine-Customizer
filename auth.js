@@ -437,6 +437,8 @@ function renderSignedInState() {
   if (settingsRow) settingsRow.hidden = !currentUser;
   const changePasswordSection = document.getElementById("changePasswordSection");
   if (changePasswordSection) changePasswordSection.hidden = !currentUser;
+  const deleteAccountSection = document.getElementById("deleteAccountSection");
+  if (deleteAccountSection) deleteAccountSection.hidden = !currentUser;
 }
 
 function openAccountModal() {
@@ -569,6 +571,130 @@ async function handleChangePassword() {
     btn.innerHTML = originalHtml;
     if (window.lucide) lucide.createIcons();
   }
+}
+
+/* ---------- 6b. Delete account ---------- */
+
+function deleteAccountEls() {
+  return {
+    overlay: document.getElementById("deleteAccountOverlay"),
+    btnClose: document.getElementById("btnCloseDeleteAccount"),
+    btnCancel: document.getElementById("btnCancelDeleteAccount"),
+    btnConfirm: document.getElementById("btnConfirmDeleteAccount"),
+    btnBackup: document.getElementById("btnDeleteAccountBackup"),
+    username: document.getElementById("deleteAccountUsername"),
+    password: document.getElementById("deleteAccountPassword"),
+    error: document.getElementById("deleteAccountError")
+  };
+}
+
+function openDeleteAccountModal() {
+  const { overlay, username, password, error } = deleteAccountEls();
+  if (!currentUser) return;
+  error.hidden = true;
+  username.value = "";
+  password.value = "";
+  overlay.hidden = false;
+  if (window.lucide) lucide.createIcons();
+  username.focus();
+}
+
+function closeDeleteAccountModal() {
+  deleteAccountEls().overlay.hidden = true;
+}
+
+async function handleDeleteAccount() {
+  const { username, password, error, btnConfirm } = deleteAccountEls();
+  error.hidden = true;
+
+  if (!currentUser) return;
+
+  const uname = normalizeUsername(username.value);
+  if (uname.toLowerCase() !== currentUser.username.toLowerCase()) {
+    error.textContent = "That username doesn't match the signed-in account.";
+    error.hidden = false;
+    return;
+  }
+  if (!password.value) {
+    error.textContent = "Please enter your password.";
+    error.hidden = false;
+    return;
+  }
+
+  const originalHtml = btnConfirm.innerHTML;
+  btnConfirm.disabled = true;
+  btnConfirm.textContent = "Deleting…";
+  try {
+    const { auth, db, authMod, fsMod } = await loadFirebase();
+    if (!auth.currentUser) throw new Error("You're not signed in.");
+
+    // Re-authenticate right before the destructive calls below, same as
+    // Change Password — sidesteps auth/requires-recent-login and doubles
+    // as the actual password check for this confirmation dialog.
+    const credential = authMod.EmailAuthProvider.credential(auth.currentUser.email, password.value);
+    await authMod.reauthenticateWithCredential(auth.currentUser, credential);
+
+    const uid = auth.currentUser.uid;
+    const docId = usernameDocId(currentUser.username);
+
+    // Firestore cleanup must happen BEFORE the auth user is deleted — once
+    // the auth user is gone, request.auth is null and these deletes will
+    // be denied by security rules, orphaning the docs permanently. So
+    // these are no longer best-effort: if either fails, we stop and show
+    // the real error instead of deleting the auth account anyway.
+    try {
+      await fsMod.deleteDoc(fsMod.doc(db, "usernames", docId));
+      await fsMod.deleteDoc(fsMod.doc(db, "routines", uid));
+    } catch (e) {
+      throw new Error(
+        "Could not delete your account data (permission denied). " +
+        "Please contact support, or check that Firestore rules allow a signed-in user to delete their own usernames/{id} and routines/{uid} documents."
+      );
+    }
+
+    await authMod.deleteUser(auth.currentUser);
+
+    stopCloudSync();
+    currentUser = null;
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    closeDeleteAccountModal();
+    closeAccountModal();
+    renderSignedInState();
+    if (window.resetEverything) window.resetEverything("Account deleted. Everything reset.");
+    else if (window.showToast) showToast("Account deleted.");
+  } catch (e) {
+    if (e && (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential")) {
+      error.textContent = "Incorrect password.";
+    } else {
+      error.textContent = friendlyAuthError(e) || "Could not delete account. Please try again.";
+    }
+    error.hidden = false;
+  } finally {
+    btnConfirm.disabled = false;
+    btnConfirm.innerHTML = originalHtml;
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
+function wireDeleteAccountUI() {
+  const { overlay, btnClose, btnCancel, btnConfirm, btnBackup, username, password } = deleteAccountEls();
+  const btnOpen = document.getElementById("btnOpenDeleteAccount");
+  if (btnOpen) btnOpen.addEventListener("click", openDeleteAccountModal);
+  btnClose.addEventListener("click", closeDeleteAccountModal);
+  btnCancel.addEventListener("click", closeDeleteAccountModal);
+  overlay.addEventListener("click", (e) => { if (e.target.id === "deleteAccountOverlay") closeDeleteAccountModal(); });
+  btnConfirm.addEventListener("click", handleDeleteAccount);
+  btnBackup.addEventListener("click", () => {
+    if (window.exportTxt) window.exportTxt();
+  });
+  [username, password].forEach(inp => {
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); handleDeleteAccount(); }
+    });
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay.hidden) closeDeleteAccountModal();
+  });
 }
 
 async function handleLogout() {
@@ -870,6 +996,7 @@ function wireImportUI() {
   if (!btnAccount) return;
 
   wireAccountUI();
+  wireDeleteAccountUI();
   wireShareUI();
   btnAccount.hidden = false;
   if (window.lucide) lucide.createIcons();

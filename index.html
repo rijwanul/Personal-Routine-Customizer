@@ -307,6 +307,46 @@
           <button class="btn btn--accent" id="btnChangePassword"><i data-lucide="key-round"></i> Update password</button>
         </div>
       </div>
+
+      <div id="deleteAccountSection" hidden style="margin-top:18px">
+        <div class="detail-divider" style="margin-bottom:14px"></div>
+        <p class="panel-desc" style="font-weight:600; color:var(--danger, #d33)"><i data-lucide="user-x"></i> Delete account</p>
+        <p class="panel-desc" style="margin-top:4px">Permanently deletes your account and cloud-synced routine. This cannot be undone.</p>
+        <div class="data-actions">
+          <button class="btn btn--danger" id="btnOpenDeleteAccount"><i data-lucide="user-x"></i> Delete account</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DELETE ACCOUNT MODAL (Firebase, optional) ============ -->
+<div class="modal-overlay" id="deleteAccountOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="deleteAccountModalTitle">
+    <div class="modal__head">
+      <h2 id="deleteAccountModalTitle"><i data-lucide="user-x"></i> Delete account</h2>
+      <button class="btn btn--icon" id="btnCloseDeleteAccount" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body">
+      <p class="panel-desc">This permanently deletes your account and your cloud-synced routine, and resets this device back to defaults. This cannot be undone.</p>
+      <div class="data-actions" style="margin-bottom:14px">
+        <button class="btn" id="btnDeleteAccountBackup" type="button"><i data-lucide="download"></i> Download backup (.txt) first</button>
+      </div>
+      <p class="panel-desc" style="font-weight:600; color:var(--ink)">Confirm your identity to continue</p>
+      <div class="form-field">
+        <label for="deleteAccountUsername">Username</label>
+        <input type="text" id="deleteAccountUsername" autocomplete="username" placeholder="Your username" spellcheck="false">
+      </div>
+      <div class="form-field">
+        <label for="deleteAccountPassword">Password</label>
+        <input type="password" id="deleteAccountPassword" autocomplete="current-password" placeholder="Your password">
+      </div>
+      <p class="account-error" id="deleteAccountError" hidden></p>
+    </div>
+    <div class="modal__foot">
+      <button class="btn" id="btnCancelDeleteAccount">Cancel</button>
+      <div class="modal__spacer"></div>
+      <button class="btn btn--danger" id="btnConfirmDeleteAccount"><i data-lucide="user-x"></i> Permanently delete account</button>
     </div>
   </div>
 </div>
