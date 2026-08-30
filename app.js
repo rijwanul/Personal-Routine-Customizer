@@ -552,13 +552,14 @@ function buildCourseCard(course, placement){
   card.style.color = shadeForText(course.color);
   card.draggable = true;
   card.dataset.placementId = placement.id;
-  const isFilterTarget = bankFilterCourseId && course.id === bankFilterCourseId;
+  const hasActiveFilters = activeFilters.length > 0;
+  const isFilterTarget = hasActiveFilters && courseMatchesFilters(course);
 
   if(placement.skipped){
     card.classList.add('is-skipped');
     card.style.setProperty('--fade-opacity', ((placement.fadeOpacity ?? 40) / 100));
   }
-  if(bankFilterCourseId && !isFilterTarget) card.classList.add('is-filtered-out');
+  if(hasActiveFilters && !isFilterTarget) card.classList.add('is-filtered-out');
   if(isFilterTarget) card.classList.add('is-filter-target');
 
   const name = courseTitle(course);
@@ -898,19 +899,248 @@ function courseMatchesSearch(course, query){
   return haystack.includes(q);
 }
 
-/* Bank "funnel" filter: temporarily fades every grid card except those
-   belonging to one selected course. Intentionally NOT persisted to state/
-   localStorage — it's a transient view filter, so a page refresh always
-   clears it, as does clicking the funnel again. */
-let bankFilterCourseId = null;
+/* =========================================================================
+   GRID FILTERS — multiple AND'd field-value rules
+   Temporarily fades every grid card whose course doesn't match every active
+   rule (course[field] === value). Intentionally NOT persisted to state/
+   localStorage — it's a transient view filter, same as the old single-course
+   funnel it replaces, so a page refresh always clears it. Two explicit,
+   confirm-gated actions (below) turn the current match set into a real edit
+   of state.placements when the user chooses one.
+   ========================================================================= */
+let activeFilters = []; // { field: fieldKey, value: string }[]
 
-function toggleBankFilter(courseId){
-  bankFilterCourseId = (bankFilterCourseId === courseId) ? null : courseId;
+/* One rule = course[field] equals value. All rules must pass (AND). An
+   empty rule list means "no filter" (everything matches). The special
+   field '__courseId' (used only by the bank chip's own funnel shortcut,
+   never shown in the filter builder's field dropdown) matches a single
+   course by id rather than by a displayed field value. The special value
+   BLANK_FIELD_VALUE matches courses where that field is empty/unset —
+   e.g. "Section" + BLANK_FIELD_VALUE = courses with no section mentioned. */
+const BLANK_FIELD_VALUE = '__blank__';
+function courseMatchesFilters(course){
+  if(activeFilters.length === 0) return true;
+  return activeFilters.every(rule=>{
+    if(rule.field === '__courseId') return course.id === rule.value;
+    if(rule.value === '') return false;
+    const raw = String(course[rule.field] ?? '').trim();
+    if(rule.value === BLANK_FIELD_VALUE) return raw === '';
+    return raw === rule.value;
+  });
+}
+
+/* Whether any course currently has this field blank/unset — used to decide
+   whether to offer the "(Blank / not mentioned)" option in the value
+   dropdown, same "only show real, matchable options" approach as the
+   distinct-value list below. */
+function fieldHasBlankValue(fieldKey){
+  return state.courses.some(c=> String(c[fieldKey] ?? '').trim() === '');
+}
+
+/* Distinct, non-empty values currently present for a given field across all
+   courses — used to populate each rule's value dropdown so choices are
+   always valid/real rather than free-text guesses. */
+function distinctFieldValues(fieldKey){
+  const values = new Set();
+  state.courses.forEach(c=>{
+    const v = c[fieldKey];
+    if(v !== undefined && v !== null && String(v).trim() !== '') values.add(String(v));
+  });
+  return Array.from(values).sort((a,b)=> a.localeCompare(b, undefined, { numeric:true, sensitivity:'base' }));
+}
+
+/* Picks a sensible starting value for a newly-added or field-switched
+   filter rule: the first real distinct value if any exist, otherwise the
+   "(Blank / not mentioned)" sentinel if that's a real option, otherwise
+   empty (renders as the disabled "No values found" state). */
+function defaultValueForField(fieldKey){
+  const values = distinctFieldValues(fieldKey);
+  if(values.length > 0) return values[0];
+  if(fieldHasBlankValue(fieldKey)) return BLANK_FIELD_VALUE;
+  return '';
+}
+
+function addFilterRule(){
+  const firstField = state.fields[0]?.key;
+  if(!firstField) return;
+  activeFilters.push({ field: firstField, value: defaultValueForField(firstField) });
+  renderFiltersModal();
   renderBank();
   renderGrid();
 }
 
+function removeFilterRule(index){
+  activeFilters.splice(index, 1);
+  renderFiltersModal();
+  renderBank();
+  renderGrid();
+}
+
+function clearAllFilters(){
+  activeFilters = [];
+  renderFiltersModal();
+  renderBank();
+  renderGrid();
+}
+
+/* Bank chip funnel icon: quick "isolate this course" shortcut into the same
+   activeFilters system. Clicking it replaces any current filters with a
+   single __courseId rule; clicking the active chip's funnel again clears
+   filters entirely. This mirrors the old single-course funnel's UX while
+   staying on the one shared filter mechanism used by the Filters modal. */
+function isChipFilterActive(courseId){
+  return activeFilters.length === 1 && activeFilters[0].field === '__courseId' && activeFilters[0].value === courseId;
+}
+function toggleChipFilter(courseId){
+  activeFilters = isChipFilterActive(courseId) ? [] : [{ field:'__courseId', value: courseId }];
+  renderBank();
+  renderGrid();
+}
+
+function updateFilterRuleField(index, fieldKey){
+  activeFilters[index] = { field: fieldKey, value: defaultValueForField(fieldKey) };
+  renderFiltersModal();
+  renderBank();
+  renderGrid();
+}
+
+function updateFilterRuleValue(index, value){
+  activeFilters[index].value = value;
+  renderBank();
+  renderGrid();
+}
+
+function openFiltersModal(){
+  renderFiltersModal();
+  document.getElementById('filtersOverlay').hidden = false;
+}
+function closeFiltersModal(){ document.getElementById('filtersOverlay').hidden = true; }
+
+function renderFiltersModal(){
+  const list = document.getElementById('filterRuleList');
+  if(!list) return;
+  list.innerHTML = '';
+  document.getElementById('filterEmptyHint').hidden = activeFilters.length > 0;
+
+  activeFilters.forEach((rule, index)=>{
+    const row = document.createElement('div');
+    row.className = 'filter-rule';
+
+    const fieldSelect = document.createElement('select');
+    state.fields.forEach(f=>{
+      const opt = document.createElement('option');
+      opt.value = f.key;
+      opt.textContent = f.label || f.key;
+      if(f.key === rule.field) opt.selected = true;
+      fieldSelect.appendChild(opt);
+    });
+    fieldSelect.addEventListener('change', ()=> updateFilterRuleField(index, fieldSelect.value));
+
+    const valueSelect = document.createElement('select');
+    const values = distinctFieldValues(rule.field);
+    const hasBlank = fieldHasBlankValue(rule.field);
+    if(values.length === 0 && !hasBlank){
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No values found';
+      opt.disabled = true;
+      valueSelect.appendChild(opt);
+      valueSelect.disabled = true;
+    } else {
+      values.forEach(v=>{
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        if(v === rule.value) opt.selected = true;
+        valueSelect.appendChild(opt);
+      });
+      if(hasBlank){
+        const opt = document.createElement('option');
+        opt.value = BLANK_FIELD_VALUE;
+        opt.textContent = '(Blank / not mentioned)';
+        if(rule.value === BLANK_FIELD_VALUE) opt.selected = true;
+        valueSelect.appendChild(opt);
+      }
+    }
+    valueSelect.addEventListener('change', ()=> updateFilterRuleValue(index, valueSelect.value));
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'filter-rule__remove';
+    removeBtn.setAttribute('aria-label', 'Remove this filter');
+    removeBtn.innerHTML = '<i data-lucide="x"></i>';
+    removeBtn.addEventListener('click', ()=> removeFilterRule(index));
+
+    row.appendChild(fieldSelect);
+    if(index > 0){
+      const and = document.createElement('span');
+      and.className = 'filter-rule__and';
+      and.textContent = 'AND';
+      row.insertBefore(and, fieldSelect);
+    }
+    row.appendChild(valueSelect);
+    row.appendChild(removeBtn);
+    list.appendChild(row);
+  });
+
+  const hasFilters = activeFilters.length > 0;
+  document.getElementById('btnClearFilters').disabled = !hasFilters;
+  document.getElementById('btnFilterKeepMatched').disabled = !hasFilters;
+  document.getElementById('btnFilterKeepOthers').disabled = !hasFilters;
+
+  if(window.lucide) lucide.createIcons();
+}
+
+/* Returns the set of course IDs currently matched by activeFilters, for use
+   by the two grid-mutating actions below. */
+function filteredCourseIds(){
+  return new Set(state.courses.filter(c=>courseMatchesFilters(c)).map(c=>c.id));
+}
+
+/* "Keep filtered & remove others": placements for matched courses stay,
+   every other placement is removed from the grid. Course bank untouched. */
+function applyFilterKeepMatched(){
+  if(activeFilters.length === 0) return;
+  const matchedIds = filteredCourseIds();
+  const toRemove = state.placements.filter(p=>!matchedIds.has(p.courseId)).length;
+  if(toRemove === 0){ showToast('Nothing to remove — everything on the grid already matches.', 'error'); return; }
+  if(!confirm(`Remove ${toRemove} placement${toRemove===1?'':'s'} that don't match the current filters? Your course bank stays intact.`)) return;
+  state.placements = state.placements.filter(p=>matchedIds.has(p.courseId));
+  saveState();
+  renderGrid();
+  showToast('Kept filtered courses, removed the rest.');
+}
+
+/* "Remove filtered & keep others": placements for matched courses are
+   removed, everything else on the grid stays. Course bank untouched. */
+function applyFilterKeepOthers(){
+  if(activeFilters.length === 0) return;
+  const matchedIds = filteredCourseIds();
+  const toRemove = state.placements.filter(p=>matchedIds.has(p.courseId)).length;
+  if(toRemove === 0){ showToast('No placements match the current filters.', 'error'); return; }
+  if(!confirm(`Remove ${toRemove} placement${toRemove===1?'':'s'} that match the current filters? Your course bank stays intact.`)) return;
+  state.placements = state.placements.filter(p=>!matchedIds.has(p.courseId));
+  saveState();
+  renderGrid();
+  showToast('Removed filtered courses, kept the rest.');
+}
+
+/* Updates the small count badge and active-state styling on the "Filters"
+   toggle button in the bank header. Counts real multi-filter rules only —
+   the chip's single-course __courseId shortcut still shows as "1" since,
+   functionally, it is one active filter. */
+function renderFilterBadge(){
+  const btn = document.getElementById('btnOpenFilters');
+  const badge = document.getElementById('filterCountBadge');
+  if(!btn || !badge) return;
+  const count = activeFilters.length;
+  badge.hidden = count === 0;
+  badge.textContent = String(count);
+  btn.classList.toggle('is-filter-active', count > 0);
+}
+
 function renderBank(){
+  renderFilterBadge();
   const list = document.getElementById('bankList');
   const searchInput = document.getElementById('bankSearchInput');
   const query = searchInput ? searchInput.value : '';
@@ -933,13 +1163,13 @@ function renderBank(){
         <button class="course-chip__duplicate" title="Duplicate course" aria-label="Duplicate course"><i data-lucide="copy-plus"></i></button>
         <button class="course-chip__edit" title="Edit course" aria-label="Edit course"><i data-lucide="pencil"></i></button>
       </div>
-      <button class="course-chip__filter" title="${bankFilterCourseId===course.id ? 'Clear filter' : 'Show only this course on the grid'}" aria-label="Filter grid to this course"><i data-lucide="${bankFilterCourseId===course.id ? 'funnel-x' : 'funnel'}"></i></button>
+      <button class="course-chip__filter" title="${isChipFilterActive(course.id) ? 'Clear filter' : 'Show only this course on the grid'}" aria-label="Filter grid to this course"><i data-lucide="${isChipFilterActive(course.id) ? 'funnel-x' : 'funnel'}"></i></button>
       <div class="course-chip__name">${escapeHtml(courseTitle(course))}</div>
       ${course.courseCode ? `<div class="course-chip__code">${escapeHtml(course.courseCode)}</div>` : ''}
       ${metaBits.length ? `<div class="course-chip__meta"><span>${metaBits.map(escapeHtml).join(' · ')}</span></div>` : ''}
     `;
 
-    if(bankFilterCourseId === course.id) chip.classList.add('is-filter-active');
+    if(isChipFilterActive(course.id)) chip.classList.add('is-filter-active');
 
     chip.addEventListener('dragstart', (e)=>{
       e.dataTransfer.setData('text/plain', JSON.stringify({ type:'bank-course', courseId: course.id }));
@@ -947,9 +1177,28 @@ function renderBank(){
       chip.classList.add('dragging');
     });
     chip.addEventListener('dragend', ()=> chip.classList.remove('dragging'));
+    // Reordering chips within the bank list itself: dragging one chip over
+    // another shows a before/after indicator (top vs bottom half of the
+    // target chip), and dropping there moves it in state.courses. This is
+    // layered on top of the bank->grid drag above (same dragstart, since a
+    // single drag gesture can end either on the grid or back in the list)
+    // and is purely visual/positional here — reordering happens in the
+    // list's own 'drop' handler below, which reads these classes.
+    chip.addEventListener('dragover', (e)=>{
+      if(!e.dataTransfer.types.includes('text/plain')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = chip.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      chip.classList.toggle('drop-before', before);
+      chip.classList.toggle('drop-after', !before);
+    });
+    chip.addEventListener('dragleave', ()=>{
+      chip.classList.remove('drop-before', 'drop-after');
+    });
     chip.querySelector('.course-chip__filter').addEventListener('click', (e)=>{
       e.stopPropagation();
-      toggleBankFilter(course.id);
+      toggleChipFilter(course.id);
     });
     chip.querySelector('.course-chip__edit').addEventListener('click', (e)=>{
       e.stopPropagation();
@@ -964,6 +1213,42 @@ function renderBank(){
     list.appendChild(chip);
   });
   if(window.lucide) lucide.createIcons();
+}
+
+/* Handles dropping a bank chip back onto the bank list to reorder it (as
+   opposed to dropping it on the grid, which is handled by attachSlotDnD).
+   Attached once to the list container itself — see wireStaticUI. */
+function attachBankReorderDnD(){
+  const list = document.getElementById('bankList');
+  if(!list) return;
+  list.addEventListener('dragover', (e)=>{
+    if(!e.dataTransfer.types.includes('text/plain')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  });
+  list.addEventListener('drop', (e)=>{
+    const overChip = e.target.closest('.course-chip');
+    let payload;
+    try{ payload = JSON.parse(e.dataTransfer.getData('text/plain')); }catch(err){ return; }
+    if(!payload || payload.type !== 'bank-course') return;
+    e.preventDefault();
+    list.querySelectorAll('.course-chip').forEach(c=> c.classList.remove('drop-before','drop-after'));
+    if(!overChip) return; // dropped on empty space in the list — no-op
+
+    const fromIdx = state.courses.findIndex(c=>c.id===payload.courseId);
+    if(fromIdx < 0) return;
+    const overCourseId = overChip.dataset.courseId;
+    if(overCourseId === payload.courseId) return;
+    const insertBefore = overChip.classList.contains('drop-before');
+
+    const [moved] = state.courses.splice(fromIdx, 1);
+    let overIdx = state.courses.findIndex(c=>c.id===overCourseId);
+    const insertAt = insertBefore ? overIdx : overIdx + 1;
+    state.courses.splice(insertAt, 0, moved);
+
+    saveState();
+    renderBank();
+  });
 }
 
 /* Duplicate a course in the bank (used by the chip's duplicate icon).
@@ -1775,6 +2060,90 @@ function wireAddFieldForm({ inputId, typeSelectId, btnId, list, defaultGroup, on
    SETTINGS — general wiring
    ========================================================================= */
 
+const NO_SECTION_VALUE = '__no_section__';
+
+/* Populates the "clear a section" dropdown in Settings -> Data with every
+   distinct section value currently present among grid placements (not the
+   whole course bank — a section that's never placed has nothing to clear),
+   plus a fixed "No sections mentioned" entry for placements whose course
+   has no section value set. Re-run each time Settings opens, since
+   placements/sections can change between visits. */
+function renderSectionClearSelect(){
+  const select = document.getElementById('sectionClearSelect');
+  if(!select) return;
+  const prevValue = select.value;
+
+  const placedCourseIds = new Set(state.placements.map(p=>p.courseId));
+  const sections = new Set();
+  let hasNoSectionPlacement = false;
+  placedCourseIds.forEach(courseId=>{
+    const course = courseById(courseId);
+    const section = course?.section?.trim();
+    if(section) sections.add(section);
+    else hasNoSectionPlacement = true;
+  });
+
+  const sortedSections = Array.from(sections).sort((a,b)=> a.localeCompare(b, undefined, { numeric:true, sensitivity:'base' }));
+
+  select.innerHTML = '';
+  if(sortedSections.length === 0 && !hasNoSectionPlacement){
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No sections on the grid yet';
+    opt.disabled = true;
+    select.appendChild(opt);
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  sortedSections.forEach(section=>{
+    const opt = document.createElement('option');
+    opt.value = section;
+    opt.textContent = section;
+    select.appendChild(opt);
+  });
+  if(hasNoSectionPlacement){
+    const opt = document.createElement('option');
+    opt.value = NO_SECTION_VALUE;
+    opt.textContent = 'No sections mentioned';
+    select.appendChild(opt);
+  }
+  // Keep the previously-selected section chosen across a re-render if it's
+  // still available (e.g. after clearing a different section).
+  if(Array.from(select.options).some(o=>o.value===prevValue)) select.value = prevValue;
+}
+
+/* Removes every grid placement whose course matches the section chosen in
+   the Data tab's dropdown. Courses themselves (in the bank) are untouched
+   — only their placements on the grid are removed, same as
+   removeUnusedCourses/btnClearGrid elsewhere in this file. */
+function clearSectionFromGrid(){
+  const select = document.getElementById('sectionClearSelect');
+  if(!select || select.disabled || !select.value) return;
+  const chosen = select.value;
+  const isNoSection = chosen === NO_SECTION_VALUE;
+  const label = isNoSection ? 'No sections mentioned' : chosen;
+
+  const matchingCourseIds = new Set(
+    state.courses
+      .filter(c=>{
+        const section = c.section?.trim();
+        return isNoSection ? !section : section === chosen;
+      })
+      .map(c=>c.id)
+  );
+
+  const toRemoveCount = state.placements.filter(p=>matchingCourseIds.has(p.courseId)).length;
+  if(toRemoveCount === 0){ showToast('No placements found for that section.', 'error'); return; }
+  if(!confirm(`Remove ${toRemoveCount} placement${toRemoveCount===1?'':'s'} for section "${label}" from the grid? Your course bank stays intact.`)) return;
+
+  state.placements = state.placements.filter(p=>!matchingCourseIds.has(p.courseId));
+  saveState();
+  renderGrid();
+  renderSectionClearSelect();
+  showToast(`Cleared "${label}" from the grid.`);
+}
+
 function openSettings(){
   renderDayEditor();
   renderTimeEditor();
@@ -2318,6 +2687,18 @@ function wireEvents(){
     document.getElementById('bankPanel').classList.toggle('is-collapsed');
     document.getElementById('bankPanel').classList.toggle('is-open');
   });
+  // Bank chip drag-to-reorder (container-level drop handler; per-chip
+  // dragover/dragleave are (re)attached each renderBank() call above)
+  attachBankReorderDnD();
+
+  // Grid filters (multi-rule AND filter, replaces the old single-course-only funnel)
+  document.getElementById('btnOpenFilters').addEventListener('click', openFiltersModal);
+  document.getElementById('btnCloseFilters').addEventListener('click', closeFiltersModal);
+  document.getElementById('filtersOverlay').addEventListener('click', (e)=>{ if(e.target.id==='filtersOverlay') closeFiltersModal(); });
+  document.getElementById('btnAddFilterRule').addEventListener('click', addFilterRule);
+  document.getElementById('btnClearFilters').addEventListener('click', clearAllFilters);
+  document.getElementById('btnFilterKeepMatched').addEventListener('click', applyFilterKeepMatched);
+  document.getElementById('btnFilterKeepOthers').addEventListener('click', applyFilterKeepOthers);
 
   // Settings
   document.getElementById('btnSettings').addEventListener('click', openSettings);
@@ -2368,6 +2749,7 @@ function wireEvents(){
     if(!confirm('Remove all courses placed on the grid? Your course bank stays intact.')) return;
     state.placements = []; saveState(); renderGrid(); showToast('Grid cleared.');
   });
+  document.getElementById('btnClearSection').addEventListener('click', clearSectionFromGrid);
 document.getElementById('btnResetAll').addEventListener('click', ()=>{
     if(!confirm('Reset everything - days, times, fields, courses, and placements — back to defaults? This cannot be undone.')) return;
     resetEverything();

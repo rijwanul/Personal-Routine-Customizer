@@ -93,6 +93,9 @@
       <input type="text" id="bankSearchInput" placeholder="Search code, name, teacher..." autocomplete="off" spellcheck="false">
       <button class="bank__search-clear" id="btnBankSearchClear" type="button" aria-label="Clear search" hidden><i data-lucide="x"></i></button>
     </div>
+    <button class="btn btn--sm bank__filters-toggle" id="btnOpenFilters" type="button" title="Filter the grid by field values">
+      <i data-lucide="funnel"></i><span> Filters</span><span class="filter-count-badge" id="filterCountBadge" hidden>0</span>
+    </button>
     <div class="bank__list" id="bankList"></div>
     <button class="btn btn--sm bank__remove-unused" id="btnRemoveUnusedCourses" type="button" title="Remove courses not placed on the grid"><i data-lucide="eraser"></i><span> Remove unused courses</span></button>
   </aside>
@@ -268,6 +271,21 @@
     </div>
 
     <div class="tab-panel" id="panel-data">
+      <!-- "Clear a section" (single-field) is superseded by the multi-filter
+           system in the course bank (funnel icon -> "Filters"). Hidden, not
+           removed, in case a Data-tab entry point is wanted again later. -->
+      <div id="sectionClearBlock" hidden>
+        <p class="panel-desc"><i data-lucide="layers"></i> Clear all grid placements for one section at a time.</p>
+        <div class="field-row">
+          <label for="sectionClearSelect">Section</label>
+          <select id="sectionClearSelect"></select>
+        </div>
+        <div class="data-actions">
+          <button class="btn btn--danger" id="btnClearSection"><i data-lucide="eraser"></i> Clear this section's classes</button>
+        </div>
+        <div class="detail-divider" style="margin:14px 0"></div>
+      </div>
+
       <p class="panel-desc">Your routine is saved automatically in this browser (offline-capable). Use export to back it up or move it to another device.</p>
       <div class="data-actions">
         <button class="btn" id="btnClearGrid"><i data-lucide="eraser"></i> Clear grid placements</button>
@@ -423,6 +441,30 @@
       <button class="btn" id="btnCancelTeacherData">Cancel</button>
       <div class="modal__spacer"></div>
       <button class="btn btn--accent" id="btnSaveTeacherData"><i data-lucide="save"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ GRID FILTERS MODAL ============ -->
+<div class="modal-overlay" id="filtersOverlay" hidden>
+  <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="filtersModalTitle">
+    <div class="modal__head">
+      <h2 id="filtersModalTitle"><i data-lucide="funnel"></i> Filters</h2>
+      <button class="btn btn--icon" id="btnCloseFilters" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal__body">
+      <p class="bank__hint" style="margin-top:0">Match courses by field value. All rules must match (AND). Matching courses stay highlighted on the grid — nothing is removed until you choose an action below.</p>
+      <div id="filterRuleList" class="filter-rule-list"></div>
+      <button class="btn btn--sm" id="btnAddFilterRule" type="button"><i data-lucide="plus"></i> Add filter</button>
+      <p class="panel-desc" id="filterEmptyHint">No filters yet — add one above to start matching courses.</p>
+    </div>
+    <div class="modal__foot modal__foot--wrap">
+      <button class="btn" id="btnClearFilters">Clear filters</button>
+      <div class="modal__spacer"></div>
+      <div class="filter-actions-group">
+        <button class="btn btn--warning" id="btnFilterKeepMatched" title="Keep only the matched courses' placements; remove everything else from the grid"><i data-lucide="funnel"></i> Keep filtered &amp; remove others</button>
+        <button class="btn btn--danger" id="btnFilterKeepOthers" title="Remove the matched courses' placements; leave everything else on the grid"><i data-lucide="eraser"></i> Remove filtered &amp; keep others</button>
+      </div>
     </div>
   </div>
 </div>
