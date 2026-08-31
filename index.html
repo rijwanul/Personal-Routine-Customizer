@@ -36,6 +36,16 @@
 </head>
 <body>
 
+<!-- ============ VIEW-MODE BANNER (shown only for ?view=username links) ============ -->
+<div class="view-banner" id="viewBanner" hidden>
+  <i data-lucide="eye"></i>
+  <span>Viewing <strong id="viewBannerUsername"></strong>'s routine — read-only.</span>
+  <span id="viewBannerFilterNote"></span>
+  <div class="view-banner__spacer"></div>
+  <button class="btn btn--sm btn--accent" id="btnViewImport"><i data-lucide="cloud-download"></i> Import this routine</button>
+  <button class="view-banner__exit" id="btnExitViewMode" type="button">Exit view</button>
+</div>
+
 <!-- ============ TOP BAR ============ -->
 <header class="topbar">
   <div class="topbar__brand">
@@ -67,7 +77,7 @@
         <button data-action="export-txt"><i data-lucide="file-text"></i> Export .txt</button>
         <button data-action="import-txt"><i data-lucide="upload"></i> Import .txt</button>
         <div class="menu__divider"></div>
-        <button data-action="export-json-copy"><i data-lucide="clipboard-copy"></i> Copy/Paste JSON</button>
+        <button data-action="export-json-copy"><i data-lucide="clipboard-copy"></i> JSON Data</button>
         <div class="menu__divider"></div>
         <button data-action="import-username" id="menuImportUsername" hidden><i data-lucide="user-plus"></i> Import from user</button>
         <div class="menu__divider" id="menuImportUsernameDivider" hidden></div>
@@ -409,11 +419,12 @@
 <div class="modal-overlay" id="jsonOverlay" hidden>
   <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="jsonModalTitle">
     <div class="modal__head">
-      <h2 id="jsonModalTitle"><i data-lucide="clipboard-copy"></i> Copy / Paste JSON</h2>
+      <h2 id="jsonModalTitle"><i data-lucide="clipboard-copy"></i> JSON Data</h2>
       <button class="btn btn--icon" id="btnCloseJson" aria-label="Close"><i data-lucide="x"></i></button>
     </div>
     <div class="modal__body">
-      <p class="bank__hint" style="margin-top:0">Copy this JSON to back up or share your routine, or paste JSON here and import it to replace your current routine.</p>
+      <p class="bank__hint" style="margin-top:0" id="jsonModalImportHint">Copy this JSON to back up or share your routine, or paste JSON here and import it to replace your current routine.</p>
+      <p class="bank__hint" style="margin-top:0" id="jsonModalViewHint" hidden>Copy this JSON to back up or share this routine.</p>
       <textarea id="jsonTextarea" class="json-textarea" spellcheck="false" placeholder="Paste routine JSON here..."></textarea>
     </div>
     <div class="modal__foot">
@@ -540,6 +551,13 @@
             <button class="btn btn--sm" id="btnCopyShareLink" type="button"><i data-lucide="copy"></i> Copy</button>
           </div>
         </div>
+        <div class="form-field">
+          <label for="viewLinkInput">Your view link <span style="font-weight:400; color:var(--ink-faint)">(view only, no import)</span></label>
+          <div class="share-link-row">
+            <input type="text" id="viewLinkInput" readonly>
+            <button class="btn btn--sm" id="btnCopyViewLink" type="button"><i data-lucide="copy"></i> Copy</button>
+          </div>
+        </div>
       </div>
       <p class="account-error" id="shareError" hidden></p>
     </div>
@@ -554,7 +572,7 @@
 <div class="modal-overlay" id="importOverlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
     <div class="modal__head">
-      <h2 id="importModalTitle"><i data-lucide="download-cloud"></i> Import shared routine</h2>
+      <h2 id="importModalTitle"><i data-lucide="cloud-download"></i> Import shared routine</h2>
       <button class="btn btn--icon" id="btnCloseImport" aria-label="Close"><i data-lucide="x"></i></button>
     </div>
     <div class="modal__body">

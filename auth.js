@@ -753,6 +753,8 @@ function shareEls() {
     linkBlock: document.getElementById("shareLinkBlock"),
     linkInput: document.getElementById("shareLinkInput"),
     btnCopy: document.getElementById("btnCopyShareLink"),
+    viewLinkInput: document.getElementById("viewLinkInput"),
+    btnCopyViewLink: document.getElementById("btnCopyViewLink"),
     error: document.getElementById("shareError")
   };
 }
@@ -769,17 +771,30 @@ function buildShareLink() {
   return `${base}?import=${encodeURIComponent(currentUser.username)}`;
 }
 
+/** Same base URL as buildShareLink, but with ?view=<username> instead of
+    ?import=<username> — opens the routine read-only (see
+    window.enterViewMode in app.js) rather than prompting to import it.
+    There's no separate on/off toggle for this: it's available any time the
+    import link itself is (i.e. whenever isPublicShareOn is true), since
+    viewing is a strict subset of what the import link already allows. */
+function buildViewLink() {
+  if (!currentUser) return "";
+  const base = location.origin + location.pathname.replace(/[^/]*$/, "");
+  return `${base}?view=${encodeURIComponent(currentUser.username)}`;
+}
+
 /** Keeps the share icon's active state, the share modal's toggle+link, and
     the mirrored Settings toggle all in sync with isPublicShareOn. Safe to
     call anytime (e.g. right after startCloudSync restores the flag from
     Firestore, or after the user flips it). */
 function refreshShareUI() {
-  const { btn, toggle, settingsToggle, linkBlock, linkInput } = shareEls();
+  const { btn, toggle, settingsToggle, linkBlock, linkInput, viewLinkInput } = shareEls();
   if (btn) btn.classList.toggle("is-signed-in", isPublicShareOn);
   if (toggle) toggle.checked = isPublicShareOn;
   if (settingsToggle) settingsToggle.checked = isPublicShareOn;
   if (linkBlock) linkBlock.hidden = !isPublicShareOn;
   if (linkInput) linkInput.value = buildShareLink();
+  if (viewLinkInput) viewLinkInput.value = buildViewLink();
 }
 
 async function togglePublicShare(on) {
@@ -827,7 +842,7 @@ function showLoginRequiredToast(msg) {
 function closeShareModal() { shareEls().overlay.hidden = true; }
 
 function wireShareUI() {
-  const { btn, btnClose, btnClose2, overlay, toggle, settingsToggle, btnCopy } = shareEls();
+  const { btn, btnClose, btnClose2, overlay, toggle, settingsToggle, btnCopy, btnCopyViewLink } = shareEls();
   if (!btn) return;
   btn.addEventListener("click", openShareModal);
   btnClose.addEventListener("click", closeShareModal);
@@ -844,6 +859,17 @@ function wireShareUI() {
       if (window.showToast) showToast("Could not copy. Select and copy manually.", "error");
     }
   });
+  if (btnCopyViewLink) {
+    btnCopyViewLink.addEventListener("click", async () => {
+      const link = buildViewLink();
+      try {
+        await navigator.clipboard.writeText(link);
+        if (window.showToast) showToast("View link copied.");
+      } catch (e) {
+        if (window.showToast) showToast("Could not copy. Select and copy manually.", "error");
+      }
+    });
+  }
 }
 
 /* ---------- 8. Import flow — via baseURL/?import=<username> link, or
@@ -871,11 +897,20 @@ let pendingImport = null; // { state, username }
 
 function closeImportModal() {
   importEls().overlay.hidden = true;
-  // Clean the ?import=username query param out of the URL so a refresh
-  // doesn't re-trigger the prompt after the user has already decided.
-  if (new URLSearchParams(location.search).has("import")) {
+  // Clean the ?import=username or ?view=username[&filter] query params out
+  // of the URL so a refresh doesn't re-trigger the prompt (or view mode)
+  // after the user has already decided. "Import this routine" inside the
+  // view banner opens this same modal, so both routes are cleaned up here.
+  // Only touches params tied to those two routes — an unrelated param a
+  // host might have (analytics, etc.) is left alone.
+  const params = new URLSearchParams(location.search);
+  if (params.has("import") || params.has("view")) {
     const url = new URL(location.href);
     url.searchParams.delete("import");
+    if (params.has("view")) {
+      url.searchParams.delete("view");
+      if (viewRouteFilterField) url.searchParams.delete(viewRouteFilterField);
+    }
     history.replaceState(null, "", url.pathname + url.search + url.hash);
   }
   pendingImport = null;
@@ -920,6 +955,123 @@ async function maybeHandleImportRoute() {
   if (window.lucide) lucide.createIcons();
 
   await beginImportForUsername(username);
+}
+
+/* ---------- 8b. View-only route — baseURL/?view=<username>[&field=value] ----------
+   Same public routine fetch as the import route above, but renders it
+   read-only via window.enterViewMode (app.js) instead of prompting to
+   import it. Up to one filter can ride along as a second query param,
+   e.g. ?view=test&section=1bm — the param name is matched against the
+   viewed routine's field keys/labels (case-insensitively) by
+   enterViewMode itself, so any field works, not just "section". */
+function viewBannerEls() {
+  return {
+    banner: document.getElementById("viewBanner"),
+    usernameEl: document.getElementById("viewBannerUsername"),
+    filterNoteEl: document.getElementById("viewBannerFilterNote"),
+    btnImport: document.getElementById("btnViewImport"),
+    btnExit: document.getElementById("btnExitViewMode")
+  };
+}
+
+let viewRouteUsername = null; // set while ?view=... is active, used by "Import this routine"
+let viewRouteFilterField = null; // the one filter param name riding alongside ?view=, if any — used to clean up the URL later
+
+/** Strips whichever of ?view / its filter param, or ?import, is present in
+    the URL, without a page reload (so the app doesn't re-trigger the same
+    route on a manual refresh once the user has already decided). */
+function clearRouteParams(...names) {
+  const url = new URL(location.href);
+  let changed = false;
+  names.forEach((n) => { if (url.searchParams.has(n)) { url.searchParams.delete(n); changed = true; } });
+  if (changed) history.replaceState(null, "", url.pathname + url.search + url.hash);
+}
+
+async function maybeHandleViewRoute() {
+  const params = new URLSearchParams(location.search);
+  const username = params.get("view");
+  if (!username) return;
+
+  // Whichever OTHER query param is present (besides view/import) is read as
+  // the one supported filter, e.g. ?view=test&section=1bm -> field
+  // "section", value "1bm". Only the first non-reserved param is used —
+  // "up to one filter for now", per the current design.
+  let filterField = null, filterValue = null;
+  for (const [key, value] of params.entries()) {
+    if (key === "view" || key === "import") continue;
+    filterField = key; filterValue = value;
+    break;
+  }
+  viewRouteFilterField = filterField;
+
+  const { banner, usernameEl, filterNoteEl } = viewBannerEls();
+  if (!banner) return;
+
+  try {
+    const result = await fetchPublicRoutineByUsername(username);
+    if (result.notFound) throw new Error(`No account found for "${username}".`);
+    if (result.notPublic) throw new Error(`${username} hasn't made their routine viewable.`);
+
+    if (!window.enterViewMode) {
+      if (window.showToast) showToast("Viewing isn't available right now. Please try again.", "error");
+      return;
+    }
+    const outcome = window.enterViewMode(result.state, {
+      username: result.username,
+      filterField, filterValue
+    });
+    if (!outcome || !outcome.ok) {
+      if (window.showToast) showToast("Could not load that routine.", "error");
+      return;
+    }
+
+    // The viewed routine's own name is already shown by app.js in the grid
+    // title / topbar subtitle (state.routineName, rendered by
+    // applyAppearance() as part of enterViewMode's renderAll() above) — no
+    // need to repeat it here in the banner text.
+    viewRouteUsername = result.username;
+    usernameEl.textContent = result.username;
+    filterNoteEl.textContent = (filterField && outcome.filterApplied)
+      ? `Filtered by ${filterField} = ${filterValue}.`
+      : (filterField ? `("${filterField}" filter didn't match a field — showing everything.)` : "");
+    banner.hidden = false;
+    if (window.lucide) lucide.createIcons();
+  } catch (e) {
+    if (window.showToast) showToast(e.message || "Could not load that routine.", "error");
+    // Malformed/dead view link — don't leave the app stuck trying to view
+    // nothing; fall back to the viewer's own routine.
+    clearRouteParams("view", filterField || "");
+    viewRouteFilterField = null;
+  }
+}
+
+function wireViewBannerUI() {
+  const { btnImport, btnExit } = viewBannerEls();
+  if (!btnImport) return;
+  btnImport.addEventListener("click", () => {
+    if (!viewRouteUsername) return;
+    // Reuses the same modal/flow as the ?import=username route and the
+    // manual "Import from user" menu entry — just pre-armed with the
+    // username we're currently viewing, so no re-typing or lookup needed.
+    // closeImportModal() (fired on confirm/cancel/close) cleans up both the
+    // ?view= param and this filter param afterward, and the confirm handler
+    // itself exits view mode before actually importing — see wireImportUI.
+    const els_ = importEls();
+    els_.usernameField.hidden = true;
+    els_.overlay.hidden = false;
+    if (window.lucide) lucide.createIcons();
+    beginImportForUsername(viewRouteUsername);
+  });
+  if (btnExit) {
+    btnExit.addEventListener("click", () => {
+      const { banner } = viewBannerEls();
+      if (banner) banner.hidden = true;
+      clearRouteParams("view", "import", viewRouteFilterField || "");
+      viewRouteUsername = null;
+      viewRouteFilterField = null;
+      if (window.exitViewMode) window.exitViewMode();
+    });
+  }
 }
 
 /** Entry point 2: "Import from Username" in the Import/Export menu. Shows
@@ -973,6 +1125,18 @@ function wireImportUI() {
       error.hidden = false;
       return;
     }
+    // If this confirm came from the ?view=username banner's "Import this
+    // routine" button, `state` right now is still the routine being
+    // VIEWED, not the viewer's own — importing "into" it would silently
+    // vanish (saveState() no-ops the whole time viewMode is active, by
+    // design, so it wouldn't even overwrite anything visibly, it just
+    // wouldn't persist). Exit view mode first so the import lands on the
+    // viewer's real, local routine, exactly like importing normally would.
+    if (window.isViewMode && window.isViewMode() && window.exitViewMode) {
+      window.exitViewMode();
+      const { banner } = viewBannerEls();
+      if (banner) banner.hidden = true;
+    }
     const append = appendToggle.checked;
     const replaceSettings = replaceSettingsToggle.checked;
     const result = window.importRoutineState(pendingImport.state, { replace: !append, replaceSettings });
@@ -980,16 +1144,27 @@ function wireImportUI() {
       const skippedNote = result.skippedPlacements ? ` (${result.skippedPlacements} placement${result.skippedPlacements===1?'':'s'} skipped: no matching day/time)` : "";
       if (window.showToast) showToast(`Imported ${result.importedCourses} course${result.importedCourses===1?'':'s'} from ${pendingImport.username}.${skippedNote}`);
     }
-    closeImportModal();
+    closeImportModal(); // strips ?import= and, if present, ?view=+its filter param (reads viewRouteFilterField before it's cleared below)
+    viewRouteUsername = null;
+    viewRouteFilterField = null;
   });
 }
 
 /* ---------- 9. Init — only show the account icon if configured ---------- */
 (async function initAuth() {
-  // The import route works regardless of whether the account feature is
-  // configured/signed in — it's a public, read-only flow.
+  // The import and view routes work regardless of whether the account
+  // feature is configured/signed in — both are public, read-only lookups.
+  // If a link somehow carries both ?import= and ?view=, import wins (it's
+  // the more explicit ask, and was the original/only route before view
+  // mode existed).
   wireImportUI();
-  maybeHandleImportRoute();
+  wireViewBannerUI();
+  const params = new URLSearchParams(location.search);
+  if (params.has("import")) {
+    await maybeHandleImportRoute();
+  } else if (params.has("view")) {
+    await maybeHandleViewRoute();
+  }
 
   if (!isConfigured()) return; // account feature stays completely hidden/off
   const btnAccount = document.getElementById("btnAccount");

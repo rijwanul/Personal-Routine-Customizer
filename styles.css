@@ -61,6 +61,8 @@ body{
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   overflow-x:hidden;
+  display:flex;
+  flex-direction:column;
 }
 h1,h2,h3{ margin:0; font-weight:700; letter-spacing:-0.01em; }
 button{ font-family:inherit; }
@@ -105,6 +107,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 /* ============ Top bar ============ */
 .topbar{
   height: var(--topbar-h);
+  flex: none;
   display:flex; align-items:center; justify-content:space-between;
   padding: 0 20px;
   background: var(--paper-raised);
@@ -143,7 +146,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 /* ============ App layout ============ */
 .app{
   display:flex;
-  height: calc(100vh - var(--topbar-h));
+  flex:1;
   min-height: 0;
 }
 
@@ -862,7 +865,52 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 .cell-picker__newbtn:hover{ background: var(--accent-soft); }
 .cell-picker__newbtn svg{ width:14px; height:14px; }
 
-/* ============ Responsive ============ */
+/* ============ View mode (read-only, via ?view=username link) ============ */
+/* Everything that would mutate state is hidden while body.is-view-mode is
+   set — see the saveState() guard in app.js for the actual data-safety net;
+   this is purely so the UI itself doesn't invite edits it can't keep. */
+body.is-view-mode #btnAddCourse,
+body.is-view-mode #btnBulkAddCourses,
+body.is-view-mode #btnRemoveUnusedCourses,
+body.is-view-mode #btnSettings,
+body.is-view-mode #btnShareRoutine,
+body.is-view-mode #btnBank,
+body.is-view-mode #bankPanel,
+body.is-view-mode .hint-chip,
+body.is-view-mode .course-chip__actions,
+body.is-view-mode .course-chip__filter,
+body.is-view-mode .g-slot__add,
+body.is-view-mode #btnEditCourseFromDetail,
+body.is-view-mode #btnRemoveFromGrid,
+body.is-view-mode #cardDetailBody .detail-checkbox-row,
+body.is-view-mode [data-action="import-txt"],
+body.is-view-mode #menuImportUsername,
+body.is-view-mode #menuImportUsernameDivider,
+body.is-view-mode #btnImportJson,
+body.is-view-mode #jsonModalImportHint{
+  display:none !important;
+}
+body.is-view-mode #jsonModalViewHint{ display:block !important; }
+body.is-view-mode .course-chip{ cursor:default; }
+body.is-view-mode .course-card{ cursor:default; }
+body.is-view-mode .g-day-head, body.is-view-mode .g-time-head{ cursor:default !important; }
+
+.view-banner{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  flex: none;
+  padding:10px 16px; background: var(--accent-soft); border-bottom:1.5px solid var(--hairline-strong);
+  font-size:13px; color:var(--ink);
+  position: sticky; top:0; z-index: 45;
+}
+.view-banner svg{ width:15px; height:15px; color:var(--accent); flex:none; }
+.view-banner strong{ font-weight:700; }
+.view-banner__spacer{ flex:1; }
+.view-banner__exit{
+  border:none; background:none; color:var(--ink-faint); font-size:12.5px; text-decoration:underline;
+  cursor:pointer; font-family:inherit; padding:0;
+}
+.view-banner__exit:hover{ color:var(--ink); }
+
 @media (max-width: 900px){
   :root{ --day-col-w: 160px; --time-col-w: 96px; --row-h: 96px; }
   .bank{ position:fixed; left:0; top: var(--topbar-h); bottom:0; z-index:60; box-shadow: var(--shadow-lg); margin-left:-300px; }

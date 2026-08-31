@@ -162,8 +162,19 @@ function loadState(){
   }
 }
 
+/* ---------- View mode (read-only, via ?view=username[&field=value] link) ----------
+   While viewMode is set, `state` temporarily points at someone else's fetched
+   public routine instead of the local one. saveState() below is a no-op the
+   entire time it's active — the single choke point every mutation in this
+   file eventually goes through — so nothing the viewer does (drag a card,
+   edit a note, right-click delete, etc.) can ever overwrite the viewer's own
+   saved routine or get pushed to the cloud. Exiting view mode reloads the
+   real local state fresh from localStorage; the fetched copy is discarded. */
+let viewMode = null; // { username, filters: [{field,value}] } | null
+
 let saveTimer = null;
 function saveState(){
+  if(viewMode) return; // read-only: never persist someone else's routine, and never overwrite the viewer's own
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
     try{
@@ -182,12 +193,65 @@ function saveState(){
   }, 150);
 }
 
+/* Cross-file bridge for auth.js's ?view=username flow (mirrors the
+   getRoutineState/replaceRoutineState bridge below). Swaps `state` to the
+   given routine, marks viewMode active (so saveState() above no-ops for the
+   rest of this visit), applies up to one field/value filter via the
+   existing activeFilters system, and renders. exitViewMode() restores the
+   viewer's own routine from localStorage afterward. */
+window.enterViewMode = function(publicState, { username, filterField, filterValue } = {}){
+  try{
+    state = mergeIntoDefaultState(publicState || {});
+    viewMode = { username, filters: [] };
+    activeFilters = [];
+    if(filterField && filterValue !== undefined && filterValue !== null && filterValue !== ''){
+      // Field is matched by key OR by label, case-insensitively, so a URL
+      // like ?view=test&section=1bm works whether "section" refers to the
+      // field's internal key (the common case) or its display label.
+      const field = state.fields.find(f=>
+        f.key.toLowerCase() === String(filterField).toLowerCase() ||
+        (f.label||'').toLowerCase() === String(filterField).toLowerCase()
+      );
+      if(field){
+        // The value from the URL is matched case-insensitively too (e.g.
+        // ?section=6dm and ?section=6DM should both work) by resolving it
+        // against the actual, real-cased values present in the data —
+        // courseMatchesFilters() itself still does a plain exact match, so
+        // this is where the case-insensitivity is actually applied: we
+        // rewrite the URL's value to whatever casing the course data really
+        // uses before it ever becomes an activeFilters rule. distinctFieldValues()
+        // also doubles as the BLANK_FIELD_VALUE case, since an empty-string
+        // URL value was already excluded by the filterValue!=='' check above.
+        const realValue = distinctFieldValues(field.key).find(v=> v.toLowerCase() === String(filterValue).toLowerCase());
+        activeFilters = [{ field: field.key, value: realValue !== undefined ? realValue : String(filterValue) }];
+        viewMode.filters = activeFilters.slice();
+      }
+    }
+    renderAll();
+    return { ok:true, filterApplied: activeFilters.length > 0 };
+  }catch(e){
+    console.error('Could not load that shared routine for viewing', e);
+    return { ok:false };
+  }
+};
+window.isViewMode = function(){ return !!viewMode; };
+window.exitViewMode = function(){
+  viewMode = null;
+  activeFilters = [];
+  state = loadState();
+  renderAll();
+};
+
 /* ---------- Cross-file bridge for auth.js (optional account/cloud-sync feature) ----------
    auth.js is a separate, optional module that knows nothing about the shape
    of app.js internals beyond this small surface:
      - window.getRoutineState()      -> current state object
      - window.replaceRoutineState(s) -> adopt a state object (e.g. loaded from
        the cloud), persist it locally, and re-render the whole UI
+     - window.enterViewMode(s, opts) -> render someone else's routine
+       read-only, with saveState() disabled for the visit (see above)
+     - window.isViewMode()           -> whether view mode is currently active
+     - window.exitViewMode()         -> restore the viewer's own routine
    Keeping this surface tiny means app.js works completely standalone even
    if auth.js is removed. */
 window.getRoutineState = function(){ return state; };
@@ -354,12 +418,20 @@ function courseTitle(course){
 function applyAppearance(){
   document.documentElement.style.setProperty('--accent', state.accent || '#4C5FD5');
   document.body.dataset.density = state.density || 'comfortable';
+  document.body.classList.toggle('is-view-mode', !!viewMode);
   document.getElementById('routineSubtitle').textContent = state.routineName || 'Untitled routine';
   const titleEl = document.getElementById('gridTitleInline');
   if(document.activeElement !== titleEl) titleEl.textContent = state.routineName || 'Untitled routine';
+  if(titleEl) titleEl.contentEditable = viewMode ? 'false' : 'true';
+  const exportBtn = document.getElementById('btnExport');
+  if(exportBtn){
+    const label = viewMode ? 'Export' : 'Import / Export';
+    exportBtn.title = label;
+    exportBtn.setAttribute('aria-label', label);
+  }
   document.title = (state.routineName || 'MyRoutine Customizer') + ' - MyRoutine Customizer';
-  document.body.classList.toggle('click-cell-enabled', !!state.features?.clickEmptyCellToAdd);
-  const bulkEnabled = !!state.features?.bulkAddCourses;
+  document.body.classList.toggle('click-cell-enabled', !viewMode && !!state.features?.clickEmptyCellToAdd);
+  const bulkEnabled = !viewMode && !!state.features?.bulkAddCourses;
   const bulkBtn = document.getElementById('btnBulkAddCourses');
   if(bulkBtn) bulkBtn.hidden = !bulkEnabled;
   // Both "New course" and "Bulk Courses" showing at once -> shrink to
@@ -455,7 +527,7 @@ function renderGrid(){
       // (off by default) since it changes what a plain click on the grid
       // does.
       slot.addEventListener('click', (e)=>{
-        if(!state.features?.clickEmptyCellToAdd) return;
+        if(viewMode || !state.features?.clickEmptyCellToAdd) return;
         if(e.target.closest('.course-card') || e.target.closest('.g-slot__add')) return;
         openCellPicker(day.id, time.id, slot);
       });
@@ -550,7 +622,7 @@ function buildCourseCard(course, placement){
   card.style.background = hexToSoft(course.color);
   card.style.borderColor = course.color;
   card.style.color = shadeForText(course.color);
-  card.draggable = true;
+  card.draggable = !viewMode;
   card.dataset.placementId = placement.id;
   const hasActiveFilters = activeFilters.length > 0;
   const isFilterTarget = hasActiveFilters && courseMatchesFilters(course);
@@ -587,7 +659,7 @@ function buildCourseCard(course, placement){
   });
   card.addEventListener('contextmenu', (e)=>{
     e.preventDefault();
-    if(!state.features?.rightClickDelete) return;
+    if(viewMode || !state.features?.rightClickDelete) return;
     if(state.features?.confirmBeforeDelete && !confirm(`Remove ${courseTitle(course)} from this slot?`)) return;
     removePlacementById(placement.id);
   });
@@ -687,6 +759,7 @@ function attachSlotDnD(slot){
     if(!target) return;
     e.preventDefault();
     target.classList.remove('is-dragover');
+    if(viewMode) return;
     let payload;
     try{ payload = JSON.parse(e.dataTransfer.getData('text/plain')); }catch(err){ return; }
     if(!payload) return;
@@ -1151,7 +1224,7 @@ function renderBank(){
     const chip = document.createElement('div');
     chip.className = 'course-chip';
     chip.style.borderLeftColor = course.color;
-    chip.draggable = true;
+    chip.draggable = !viewMode;
     chip.dataset.courseId = course.id;
 
     const metaBits = [];
@@ -1227,6 +1300,7 @@ function attachBankReorderDnD(){
     e.dataTransfer.dropEffect = 'move';
   });
   list.addEventListener('drop', (e)=>{
+    if(viewMode) return;
     const overChip = e.target.closest('.course-chip');
     let payload;
     try{ payload = JSON.parse(e.dataTransfer.getData('text/plain')); }catch(err){ return; }
@@ -1630,18 +1704,23 @@ function openCardDetail(course, placement){
         </div>
       `).join('')}
       <div class="detail-divider"></div>
-      ${enabledSlotFields().map(f=>`
-        <div class="detail-item detail-editable">
+      ${enabledSlotFields()
+        .filter(f=> !viewMode || placement[f.key]) // view mode: skip empty rows entirely (nothing to show, and nothing editable to show it in)
+        .map(f=>`
+        <div class="detail-item${viewMode ? '' : ' detail-editable'}">
           <i data-lucide="${slotIconFor(f.key)}"></i>
           <div style="flex:1">
             <div class="detail-label">${escapeHtml(f.label)}</div>
-            ${f.type==='textarea'
-              ? `<textarea data-slot-key="${f.key}" placeholder="e.g. Class moved this week, bring calculator...">${escapeHtml(placement[f.key]||'')}</textarea>`
-              : `<input type="${f.type==='tel'?'tel':'text'}" data-slot-key="${f.key}" value="${escapeHtml(placement[f.key]||'')}" placeholder="e.g. Room 402">`
+            ${viewMode
+              ? `<div class="detail-value">${escapeHtml(placement[f.key]||'')}</div>`
+              : (f.type==='textarea'
+                ? `<textarea data-slot-key="${f.key}" placeholder="e.g. Class moved this week, bring calculator...">${escapeHtml(placement[f.key]||'')}</textarea>`
+                : `<input type="${f.type==='tel'?'tel':'text'}" data-slot-key="${f.key}" value="${escapeHtml(placement[f.key]||'')}" placeholder="e.g. Room 402">`)
             }
           </div>
         </div>
       `).join('')}
+      ${viewMode ? '' : `
       <div class="detail-divider"></div>
       <div class="detail-item">
         <i data-lucide="palette"></i>
@@ -1649,7 +1728,7 @@ function openCardDetail(course, placement){
           <div class="detail-label">Chip color</div>
           <div class="color-swatches" id="detailColorSwatches" style="margin-top:6px"></div>
         </div>
-      </div>
+      </div>`}
       <label class="detail-checkbox-row">
         <input type="checkbox" id="detailAttendToggle" ${placement.skipped ? 'checked' : ''}>
         Faded?
@@ -1659,21 +1738,23 @@ function openCardDetail(course, placement){
   `;
 
   const swatchWrap = document.getElementById('detailColorSwatches');
-  COURSE_PALETTE.forEach(hex=>{
-    const sw = document.createElement('div');
-    sw.className = 'swatch' + (hex.toLowerCase()===(course.color||'').toLowerCase() ? ' is-selected' : '');
-    sw.style.background = hex;
-    sw.dataset.hex = hex;
-    sw.addEventListener('click', ()=>{
-      swatchWrap.querySelectorAll('.swatch').forEach(s=>s.classList.remove('is-selected'));
-      sw.classList.add('is-selected');
-      course.color = hex;
-      saveState();
-      renderGrid();
-      renderBank();
+  if(swatchWrap){
+    COURSE_PALETTE.forEach(hex=>{
+      const sw = document.createElement('div');
+      sw.className = 'swatch' + (hex.toLowerCase()===(course.color||'').toLowerCase() ? ' is-selected' : '');
+      sw.style.background = hex;
+      sw.dataset.hex = hex;
+      sw.addEventListener('click', ()=>{
+        swatchWrap.querySelectorAll('.swatch').forEach(s=>s.classList.remove('is-selected'));
+        sw.classList.add('is-selected');
+        course.color = hex;
+        saveState();
+        renderGrid();
+        renderBank();
+      });
+      swatchWrap.appendChild(sw);
     });
-    swatchWrap.appendChild(sw);
-  });
+  }
 
   const fadeSlider = document.getElementById('detailFadeSlider');
 
@@ -2269,6 +2350,7 @@ function downloadBlob(blob, filename){
 function openJsonModal(){
   const textarea = document.getElementById('jsonTextarea');
   textarea.value = JSON.stringify(state, null, 2);
+  textarea.readOnly = !!viewMode;
   document.getElementById('jsonOverlay').hidden = false;
   textarea.focus();
   textarea.select();
@@ -2297,6 +2379,7 @@ async function copyJsonToClipboard(){
 }
 
 function importJsonFromTextarea(){
+  if(viewMode) return;
   const textarea = document.getElementById('jsonTextarea');
   const text = textarea.value.trim();
   if(!text){ showToast('Paste JSON before importing.', 'error'); return; }
@@ -2321,6 +2404,7 @@ function importJsonFromTextarea(){
 }
 
 function importTxt(file){
+  if(viewMode) return;
   const reader = new FileReader();
   reader.onload = ()=>{
     try{
