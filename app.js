@@ -44,7 +44,7 @@ const DEFAULT_TIMES = [
   '10:50 - 11:40 AM','11:40 AM - 12:30 PM','12:30 - 01:10 PM',
   '01:10 - 01:50 PM (BREAK)',
   '01:50 - 02:40 PM','02:40 - 03:30 PM','03:30 - 04:20 PM'
-].map((label,i)=>({ id:'t'+i, label }));
+].map((label,i)=>({ id:'t'+i, label, enabled: true }));
 
 const COURSE_PALETTE = [
   '#4C5FD5','#D9A441','#7CA982','#C4593F','#8B6BC7',
@@ -61,6 +61,7 @@ function defaultState(){
     routineName: 'Untitled routine',
     accent: '#4C5FD5',
     density: 'comfortable',
+    swapAxes: false,    // "Shift layout": false = days as columns / times as rows; true = swapped
     days: JSON.parse(JSON.stringify(DEFAULT_DAYS)),
     times: JSON.parse(JSON.stringify(DEFAULT_TIMES)),
     fields: JSON.parse(JSON.stringify(DEFAULT_FIELDS)),
@@ -89,11 +90,15 @@ function mergeIntoDefaultState(parsed){
   // normalized here (not "supported" as an import format, just kept from
   // crashing the app it's already living in).
   if(Array.isArray(parsed.times)){
-    parsed.times = parsed.times.map(t=>
-      (t && t.label === undefined && (t.start !== undefined || t.end !== undefined))
+    parsed.times = parsed.times.map(t=>{
+      if(!t) return t;
+      const base = (t.label === undefined && (t.start !== undefined || t.end !== undefined))
         ? { id: t.id, label: [t.start, t.end].filter(Boolean).join(' - ') }
-        : t
-    );
+        : t;
+      // Time slots gained a show/hide flag (same idea as days). Saved or
+      // imported data from before that has no flag — treat it as visible.
+      return Object.assign({}, base, { enabled: base.enabled !== false });
+    });
   }
   const merged = Object.assign(base, parsed);
   // features is a nested object — merge its keys individually so an
@@ -311,6 +316,7 @@ window.importRoutineState = function(importedState, { replace, replaceSettings }
       state.fields = imported.fields;
       state.accent = imported.accent;
       state.density = imported.density;
+      state.swapAxes = imported.swapAxes;
     } else {
       // Not replacing settings wholesale, but fields/slotFields are
       // key-addressable lists — append any imported field whose key
@@ -441,6 +447,7 @@ function applyAppearance(){
 }
 
 function activeDays(){ return state.days.filter(d=>d.enabled); }
+function activeTimes(){ return state.times.filter(t=>t.enabled !== false); }
 
 /* Maps JS getDay() (0=Sun) to our default day-id short labels, used to
    guess which column is "today" even if the user has renamed/reordered
@@ -458,11 +465,31 @@ function todaysDayId(){
 function renderGrid(){
   const grid = document.getElementById('routineGrid');
   const days = activeDays();
-  const times = state.times;
+  const times = activeTimes();
   const todayId = todaysDayId();
 
-  grid.style.gridTemplateColumns = `var(--time-col-w) repeat(${days.length}, var(--day-col-w))`;
-  grid.style.gridTemplateRows = `auto repeat(${times.length}, minmax(var(--row-h), auto))`;
+  // "Shift layout" (Settings > Appearance). By default days run across the
+  // top as columns and time slots run down the side as rows; when on, the
+  // two swap places. Only the arrangement changes — data is untouched.
+  const swapped = !!state.swapAxes;
+  grid.classList.toggle('is-swapped', swapped);
+
+  // Everything hidden (all days and/or all time slots): a zero-column or
+  // zero-row grid template is invalid CSS, so show a short hint instead.
+  if(days.length === 0 || times.length === 0){
+    const what = days.length === 0 && times.length === 0 ? 'days and time slots are'
+               : days.length === 0 ? 'days are' : 'time slots are';
+    grid.style.gridTemplateColumns = '1fr';
+    grid.style.gridTemplateRows = 'auto';
+    grid.innerHTML = `<div class="g-empty">All ${what} hidden. Open Settings and use "Show all" to bring them back. Your classes are still saved.</div>`;
+    return;
+  }
+
+  // First column/row is always the header strip; the rest hold the slots.
+  const colCount = swapped ? times.length : days.length;
+  const rowCount = swapped ? days.length : times.length;
+  grid.style.gridTemplateColumns = `var(--time-col-w) repeat(${colCount}, var(--day-col-w))`;
+  grid.style.gridTemplateRows = `auto repeat(${rowCount}, minmax(var(--row-h), auto))`;
   grid.innerHTML = '';
 
   // corner
@@ -473,8 +500,7 @@ function renderGrid(){
 
   const editable = !!state.features?.editFromGrid;
 
-  // day headers
-  days.forEach(day=>{
+  const makeDayHead = (day)=>{
     const h = document.createElement('div');
     h.className = 'g-cell g-day-head' + (day.id===todayId ? ' is-today' : '') + (editable ? ' is-grid-editable' : '');
     h.innerHTML = `${escapeHtml(day.label)}`;
@@ -482,11 +508,10 @@ function renderGrid(){
       h.title = 'Click to rename this day';
       h.addEventListener('click', ()=> startGridDayEdit(h, day));
     }
-    grid.appendChild(h);
-  });
+    return h;
+  };
 
-  // rows
-  times.forEach(time=>{
+  const makeTimeHead = (time)=>{
     const th = document.createElement('div');
     th.className = 'g-cell g-time-head' + (editable ? ' is-grid-editable' : '');
     th.textContent = time.label;
@@ -494,47 +519,63 @@ function renderGrid(){
       th.title = 'Click to edit this time slot';
       th.addEventListener('click', ()=> startGridTimeEdit(th, time));
     }
-    grid.appendChild(th);
+    return th;
+  };
 
-    days.forEach(day=>{
-      const slot = document.createElement('div');
-      slot.className = 'g-cell g-slot' + (day.id===todayId ? ' is-today-col' : '');
-      slot.dataset.dayId = day.id;
-      slot.dataset.timeId = time.id;
-      attachSlotDnD(slot);
+  const makeSlot = (day, time)=>{
+    const slot = document.createElement('div');
+    slot.className = 'g-cell g-slot' + (day.id===todayId ? ' is-today-col' : '');
+    slot.dataset.dayId = day.id;
+    slot.dataset.timeId = time.id;
+    attachSlotDnD(slot);
 
-      const placements = state.placements.filter(p=>p.dayId===day.id && p.timeId===time.id);
-      placements.forEach(p=>{
-        const course = courseById(p.courseId);
-        if(!course) return;
-        slot.appendChild(buildCourseCard(course, p));
-      });
-
-      const addBtn = document.createElement('button');
-      addBtn.className = 'g-slot__add';
-      addBtn.type = 'button';
-      addBtn.title = 'Add a course here';
-      addBtn.setAttribute('aria-label', 'Add a course to this slot');
-      addBtn.innerHTML = '<i data-lucide="plus"></i>';
-      addBtn.addEventListener('click', (e)=>{
-        e.stopPropagation();
-        openCellPicker(day.id, time.id, addBtn);
-      });
-      slot.appendChild(addBtn);
-
-      // Clicking empty space in the cell (not a card, not the add button)
-      // also opens the picker — gated behind a Settings > Features toggle
-      // (off by default) since it changes what a plain click on the grid
-      // does.
-      slot.addEventListener('click', (e)=>{
-        if(viewMode || !state.features?.clickEmptyCellToAdd) return;
-        if(e.target.closest('.course-card') || e.target.closest('.g-slot__add')) return;
-        openCellPicker(day.id, time.id, slot);
-      });
-
-      grid.appendChild(slot);
+    const placements = state.placements.filter(p=>p.dayId===day.id && p.timeId===time.id);
+    placements.forEach(p=>{
+      const course = courseById(p.courseId);
+      if(!course) return;
+      slot.appendChild(buildCourseCard(course, p));
     });
-  });
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'g-slot__add';
+    addBtn.type = 'button';
+    addBtn.title = 'Add a course here';
+    addBtn.setAttribute('aria-label', 'Add a course to this slot');
+    addBtn.innerHTML = '<i data-lucide="plus"></i>';
+    addBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      openCellPicker(day.id, time.id, addBtn);
+    });
+    slot.appendChild(addBtn);
+
+    // Clicking empty space in the cell (not a card, not the add button)
+    // also opens the picker — gated behind a Settings > Features toggle
+    // (off by default) since it changes what a plain click on the grid
+    // does.
+    slot.addEventListener('click', (e)=>{
+      if(viewMode || !state.features?.clickEmptyCellToAdd) return;
+      if(e.target.closest('.course-card') || e.target.closest('.g-slot__add')) return;
+      openCellPicker(day.id, time.id, slot);
+    });
+
+    return slot;
+  };
+
+  if(!swapped){
+    // Default: day headers across the top, one row per time slot.
+    days.forEach(day=> grid.appendChild(makeDayHead(day)));
+    times.forEach(time=>{
+      grid.appendChild(makeTimeHead(time));
+      days.forEach(day=> grid.appendChild(makeSlot(day, time)));
+    });
+  } else {
+    // Shifted: time-slot headers across the top, one row per day.
+    times.forEach(time=> grid.appendChild(makeTimeHead(time)));
+    days.forEach(day=>{
+      grid.appendChild(makeDayHead(day));
+      times.forEach(time=> grid.appendChild(makeSlot(day, time)));
+    });
+  }
 
   if(window.lucide) lucide.createIcons();
 }
@@ -1875,6 +1916,56 @@ function addDay(){
   saveState(); renderDayEditor(); renderGrid();
 }
 
+/* Show / hide every day at once. Only the visibility flag changes —
+   placements are never touched, so hidden days keep all their classes. */
+function setAllDaysEnabled(enabled){
+  state.days.forEach(d=>{ d.enabled = enabled; });
+  saveState(); renderDayEditor(); renderGrid();
+}
+
+/* =========================================================================
+   BULK ADD DAYS — inline panel (one line = one day; commas also split)
+   ========================================================================= */
+
+function openBulkDaysPanel(){
+  document.getElementById('bulkDaysTextarea').value = '';
+  document.getElementById('bulkDaysPanel').hidden = false;
+  updateBulkDaysCount();
+  document.getElementById('bulkDaysTextarea').focus();
+}
+
+function closeBulkDaysPanel(){
+  document.getElementById('bulkDaysPanel').hidden = true;
+  document.getElementById('bulkDaysTextarea').value = '';
+  updateBulkDaysCount();
+}
+
+function parseBulkDaysLines(){
+  const text = document.getElementById('bulkDaysTextarea').value;
+  return text.split(/[\r\n,]+/)
+    .map(part => part.trim())
+    .filter(part => part.length > 0);
+}
+
+function updateBulkDaysCount(){
+  const lines = parseBulkDaysLines();
+  const countEl = document.getElementById('bulkDaysCount');
+  const confirmBtn = document.getElementById('btnConfirmBulkDays');
+  countEl.textContent = lines.length === 0 ? '' : `${lines.length} day${lines.length===1?'':'s'} will be added`;
+  confirmBtn.disabled = lines.length === 0;
+}
+
+function confirmBulkDays(){
+  const lines = parseBulkDaysLines();
+  if(lines.length === 0) return;
+  lines.forEach(label=>{
+    state.days.push({ id: uid('d'), label, enabled: true });
+  });
+  saveState(); renderDayEditor(); renderGrid();
+  closeBulkDaysPanel();
+  showToast(`Added ${lines.length} day${lines.length===1?'':'s'}.`, 'ok');
+}
+
 /* generic drag-reorder for settings rows */
 function attachRowReorder(row, container, arr, onDrop){
   row.addEventListener('dragstart', (e)=>{
@@ -1909,10 +2000,14 @@ function renderTimeEditor(){
     row.dataset.index = idx;
     row.innerHTML = `
       <span class="row-drag" title="Drag to reorder"><i data-lucide="grip-vertical"></i></span>
+      <input type="checkbox" ${time.enabled !== false ? 'checked':''} data-role="enabled" title="Show this time slot">
       <input type="text" class="time-label" value="${escapeHtml(time.label)}" data-role="label" placeholder="10:40am - 11:30am">
       <span style="flex:1"></span>
       <button class="row-del" title="Remove time slot" data-role="delete"><i data-lucide="trash-2"></i></button>
     `;
+    row.querySelector('[data-role="enabled"]').addEventListener('change', (e)=>{
+      time.enabled = e.target.checked; saveState(); renderGrid();
+    });
     row.querySelector('[data-role="label"]').addEventListener('input', (e)=>{ time.label = e.target.value; saveState(); renderGrid(); });
     row.querySelector('[data-role="delete"]').addEventListener('click', ()=>{
       if(state.times.length<=1){ showToast('Keep at least one time slot.', 'error'); return; }
@@ -1928,7 +2023,14 @@ function renderTimeEditor(){
 }
 
 function addTimeSlot(){
-  state.times.push({ id: uid('t'), label: 'New time slot' });
+  state.times.push({ id: uid('t'), label: 'New time slot', enabled: true });
+  saveState(); renderTimeEditor(); renderGrid();
+}
+
+/* Show / hide every time slot at once. Only the visibility flag changes —
+   placements are never touched, so hidden slots keep all their classes. */
+function setAllTimesEnabled(enabled){
+  state.times.forEach(t=>{ t.enabled = enabled; });
   saveState(); renderTimeEditor(); renderGrid();
 }
 
@@ -1968,7 +2070,7 @@ function confirmBulkTimes(){
   const lines = parseBulkTimesLines();
   if(lines.length === 0) return;
   lines.forEach(label=>{
-    state.times.push({ id: uid('t'), label });
+    state.times.push({ id: uid('t'), label, enabled: true });
   });
   saveState(); renderTimeEditor(); renderGrid();
   closeBulkTimesPanel();
@@ -2233,6 +2335,7 @@ function openSettings(){
   document.getElementById('setRoutineName').value = state.routineName;
   document.getElementById('setAccentColor').value = state.accent;
   document.getElementById('setDensity').value = state.density;
+  document.getElementById('setSwapAxes').checked = !!state.swapAxes;
   document.getElementById('setRightClickDelete').checked = !!state.features?.rightClickDelete;
   document.getElementById('setConfirmBeforeDelete').checked = !!state.features?.confirmBeforeDelete;
   document.getElementById('setClickEmptyCellToAdd').checked = !!state.features?.clickEmptyCellToAdd;
@@ -2262,6 +2365,7 @@ function exportTxt(){
   lines.push('routineName=' + tsvEscape(state.routineName));
   lines.push('accent=' + state.accent);
   lines.push('density=' + state.density);
+  lines.push('swapAxes=' + !!state.swapAxes);
   lines.push('rightClickDelete=' + !!state.features?.rightClickDelete);
   lines.push('confirmBeforeDelete=' + !!state.features?.confirmBeforeDelete);
   lines.push('clickEmptyCellToAdd=' + !!state.features?.clickEmptyCellToAdd);
@@ -2275,8 +2379,8 @@ function exportTxt(){
   lines.push('');
 
   lines.push('[TIMES]');
-  lines.push('id\tlabel');
-  state.times.forEach(t=> lines.push([t.id, tsvEscape(t.label)].join('\t')));
+  lines.push('id\tlabel\tenabled');
+  state.times.forEach(t=> lines.push([t.id, tsvEscape(t.label), t.enabled !== false].join('\t')));
   lines.push('');
 
   lines.push('[FIELDS]');
@@ -2450,6 +2554,7 @@ function parseTxtExport(text){
       if(key==='routineName') s.routineName = tsvUnescape(val);
       else if(key==='accent') s.accent = val;
       else if(key==='density') s.density = val;
+      else if(key==='swapAxes') s.swapAxes = val === 'true';
       else if(key==='rightClickDelete') s.features.rightClickDelete = val === 'true';
       else if(key==='confirmBeforeDelete') s.features.confirmBeforeDelete = val === 'true';
       else if(key==='clickEmptyCellToAdd') s.features.clickEmptyCellToAdd = val === 'true';
@@ -2472,7 +2577,8 @@ function parseTxtExport(text){
         // supported — skip these rows rather than importing bad data.
         continue;
       }
-      s.times.push({ id: row.id, label: tsvUnescape(row.label) });
+      // 'enabled' column is missing in exports made before time slots could be hidden — treat as visible.
+      s.times.push({ id: row.id, label: tsvUnescape(row.label), enabled: row.enabled === undefined ? true : row.enabled === 'true' });
     } else if(section === 'FIELDS'){
       s.fields.push({ key: row.key, label: tsvUnescape(row.label), type: row.type, enabled: row.enabled==='true', core: row.core==='true', group: row.group || 'primary' });
     } else if(section === 'SLOTFIELDS'){
@@ -2791,7 +2897,19 @@ function wireEvents(){
   document.querySelectorAll('.tab').forEach(t=> t.addEventListener('click', ()=> switchTab(t.dataset.tab)));
 
   document.getElementById('btnAddDay').addEventListener('click', addDay);
+  document.getElementById('btnShowAllDays').addEventListener('click', ()=> setAllDaysEnabled(true));
+  document.getElementById('btnHideAllDays').addEventListener('click', ()=> setAllDaysEnabled(false));
+  document.getElementById('btnBulkAddDays').addEventListener('click', ()=>{
+    const panel = document.getElementById('bulkDaysPanel');
+    if(panel.hidden) openBulkDaysPanel(); else closeBulkDaysPanel();
+  });
+  document.getElementById('btnCancelBulkDays').addEventListener('click', closeBulkDaysPanel);
+  document.getElementById('btnConfirmBulkDays').addEventListener('click', confirmBulkDays);
+  document.getElementById('bulkDaysTextarea').addEventListener('input', updateBulkDaysCount);
+
   document.getElementById('btnAddTime').addEventListener('click', addTimeSlot);
+  document.getElementById('btnShowAllTimes').addEventListener('click', ()=> setAllTimesEnabled(true));
+  document.getElementById('btnHideAllTimes').addEventListener('click', ()=> setAllTimesEnabled(false));
   document.getElementById('btnBulkAddTimes').addEventListener('click', ()=>{
     const panel = document.getElementById('bulkTimesPanel');
     if(panel.hidden) openBulkTimesPanel(); else closeBulkTimesPanel();
@@ -2808,6 +2926,9 @@ function wireEvents(){
   });
   document.getElementById('setDensity').addEventListener('change', (e)=>{
     state.density = e.target.value; saveState(); applyAppearance();
+  });
+  document.getElementById('setSwapAxes').addEventListener('change', (e)=>{
+    state.swapAxes = e.target.checked; saveState(); renderGrid();
   });
   document.getElementById('setRightClickDelete').addEventListener('change', (e)=>{
     state.features.rightClickDelete = e.target.checked; saveState();

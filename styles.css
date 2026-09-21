@@ -413,6 +413,32 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   box-shadow: inset 1.5px 0 0 var(--accent), inset -1.5px 0 0 var(--accent), inset 0 -3px 0 var(--accent);
 }
 
+/* Shifted layout (Settings > Appearance > Shift layout): days run down the
+   side as row headers, time slots run across the top as column headers.
+   The header classes keep their names (.g-day-head / .g-time-head) so all
+   other logic keeps working — only their position and borders flip. */
+.routine-grid.is-swapped .g-day-head{
+  top:auto; left:0;
+  display:flex; align-items:center; justify-content:center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+  border-right: 1.5px solid var(--hairline-strong);
+}
+.routine-grid.is-swapped .g-time-head{
+  top:0; left:auto;
+  justify-content:center; text-align:center;
+  padding: 12px 8px;
+  border-right: 1px solid var(--hairline);
+  border-bottom: 1.5px solid var(--hairline-strong);
+}
+.routine-grid.is-swapped .g-day-head.is-today{
+  box-shadow: inset 0 1.5px 0 var(--accent), inset 0 -1.5px 0 var(--accent), inset -3px 0 0 var(--accent);
+}
+.routine-grid.is-swapped .g-slot.is-today-col{
+  box-shadow: inset 0 1.5px 0 color-mix(in srgb, var(--accent) 35%, transparent),
+              inset 0 -1.5px 0 color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 /* Edit-from-grid: day/time headers become clickable when the feature is on */
 .g-day-head.is-grid-editable, .g-time-head.is-grid-editable{ cursor:pointer; }
 .g-day-head.is-grid-editable:hover, .g-time-head.is-grid-editable:hover{
@@ -688,6 +714,16 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
 .conflict-choice small{ font-weight:500; opacity:.8; }
 .conflict-choice.btn--accent small{ opacity:.85; }
 
+/* Show all / Hide all toolbar above the Days and Time slots lists */
+.list-toolbar{ display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-bottom:10px; }
+
+/* Grid empty state (every day or every time slot hidden) */
+.g-empty{
+  grid-column: 1 / -1; padding: 40px 20px; text-align:center;
+  font-size:13.5px; font-weight:600; color: var(--ink-soft);
+  background: var(--paper-raised);
+}
+
 /* Day editor */
 .day-editor{ display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
 .day-row{
@@ -710,6 +746,7 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   background: var(--paper); border:1.5px solid var(--hairline-strong); border-radius:10px; padding: 8px 10px;
 }
 .time-row input[type="text"]{ border:none; background:none; font-size:13px; font-family:inherit; color:var(--ink); }
+.time-row input[type="checkbox"]{ width:16px; height:16px; accent-color: var(--accent); }
 .time-row input[type="text"]:focus{ outline:none; }
 .time-row .time-label{ flex:1; font-weight:600; }
 

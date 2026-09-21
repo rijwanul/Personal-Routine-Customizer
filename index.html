@@ -163,13 +163,34 @@
     </div>
 
     <div class="tab-panel is-active" id="panel-days">
-      <p class="panel-desc">Choose which days appear as columns, and their order.</p>
+      <p class="panel-desc">Choose which days appear as columns, and their order. Hidden days keep all their classes; they just don't show on the grid until you turn them back on.</p>
+      <div class="list-toolbar">
+        <button class="btn btn--sm" id="btnShowAllDays" type="button"><i data-lucide="eye"></i> Show all</button>
+        <button class="btn btn--sm" id="btnHideAllDays" type="button"><i data-lucide="eye-off"></i> Hide all</button>
+      </div>
       <div class="day-editor" id="dayEditor"></div>
-      <button class="btn btn--sm" id="btnAddDay"><i data-lucide="plus"></i> Add day</button>
+      <div class="panel-actions-row">
+        <button class="btn btn--sm" id="btnAddDay"><i data-lucide="plus"></i> Add day</button>
+        <button class="btn btn--sm" id="btnBulkAddDays" type="button"><i data-lucide="list-plus"></i> Bulk add days</button>
+      </div>
+      <div class="bulk-times" id="bulkDaysPanel" hidden>
+        <p class="bank__hint" style="margin-top:0">Paste one day per line (or separate them with commas). Each one becomes its own day, added in order.</p>
+        <textarea id="bulkDaysTextarea" class="json-textarea" style="min-height:120px" spellcheck="false" placeholder="Sat&#10;Sun&#10;Mon"></textarea>
+        <div class="bulk-times__foot">
+          <span id="bulkDaysCount" class="bulk-times__count"></span>
+          <div class="bulk-times__spacer"></div>
+          <button class="btn" id="btnCancelBulkDays" type="button">Cancel</button>
+          <button class="btn btn--accent" id="btnConfirmBulkDays" type="button" disabled><i data-lucide="check"></i> Add days</button>
+        </div>
+      </div>
     </div>
 
     <div class="tab-panel" id="panel-times">
-      <p class="panel-desc">Add, edit, reorder, or remove time slots. Each slot is a single free-text label, shown as typed (e.g. 10:40am - 11:30am).</p>
+      <p class="panel-desc">Add, edit, reorder, hide, or remove time slots. Each slot is a single free-text label, shown as typed (e.g. 10:40am - 11:30am). Hidden slots keep all their classes; they just don't show on the grid until you turn them back on.</p>
+      <div class="list-toolbar">
+        <button class="btn btn--sm" id="btnShowAllTimes" type="button"><i data-lucide="eye"></i> Show all</button>
+        <button class="btn btn--sm" id="btnHideAllTimes" type="button"><i data-lucide="eye-off"></i> Hide all</button>
+      </div>
       <div class="time-editor" id="timeEditor"></div>
       <div class="panel-actions-row">
         <button class="btn btn--sm" id="btnAddTime"><i data-lucide="plus"></i> Add time slot</button>
@@ -231,6 +252,13 @@
           <option value="comfortable">Comfortable</option>
           <option value="compact">Compact</option>
         </select>
+      </div>
+      <div class="feature-toggle-row">
+        <div class="feature-toggle-row__text">
+          <div class="feature-toggle-row__label">Shift layout</div>
+          <div class="feature-toggle-row__hint">Swap the grid's axes: days become rows down the side and time slots become columns across the top. Off by default. Your classes stay exactly where they are.</div>
+        </div>
+        <input type="checkbox" id="setSwapAxes">
       </div>
     </div>
 
