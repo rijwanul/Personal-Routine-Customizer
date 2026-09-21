@@ -221,7 +221,7 @@ window.enterViewMode = function(publicState, { username, filterField, filterValu
         // The value from the URL is matched case-insensitively too (e.g.
         // ?section=6dm and ?section=6DM should both work) by resolving it
         // against the actual, real-cased values present in the data —
-        // courseMatchesFilters() itself still does a plain exact match, so
+        // placementMatchesFilters() itself still does a plain exact match, so
         // this is where the case-insensitivity is actually applied: we
         // rewrite the URL's value to whatever casing the course data really
         // uses before it ever becomes an activeFilters rule. distinctFieldValues()
@@ -666,7 +666,7 @@ function buildCourseCard(course, placement){
   card.draggable = !viewMode;
   card.dataset.placementId = placement.id;
   const hasActiveFilters = activeFilters.length > 0;
-  const isFilterTarget = hasActiveFilters && courseMatchesFilters(course);
+  const isFilterTarget = hasActiveFilters && placementMatchesFilters(course, placement);
 
   if(placement.skipped){
     card.classList.add('is-skipped');
@@ -1022,42 +1022,58 @@ function courseMatchesSearch(course, query){
    confirm-gated actions (below) turn the current match set into a real edit
    of state.placements when the user chooses one.
    ========================================================================= */
-let activeFilters = []; // { field: fieldKey, value: string }[]
+let activeFilters = []; // { field: fieldKey, value: string, slot?: true }[]
 
-/* One rule = course[field] equals value. All rules must pass (AND). An
-   empty rule list means "no filter" (everything matches). The special
-   field '__courseId' (used only by the bank chip's own funnel shortcut,
-   never shown in the filter builder's field dropdown) matches a single
-   course by id rather than by a displayed field value. The special value
-   BLANK_FIELD_VALUE matches courses where that field is empty/unset —
+/* One rule = field equals value. All rules must pass (AND). An empty rule
+   list means "no filter" (everything matches).
+
+   A rule is either about the COURSE (default: course[field], e.g. Section)
+   or about the SLOT the class sits in (rule.slot === true: placement[field],
+   e.g. Room Number or Note for this Slot, or any custom slot field). Because
+   slot fields are stored per placement, filtering is decided per placed
+   card, not per course — the same course placed in two rooms can match a
+   room filter in one cell and not the other.
+
+   The special field '__courseId' (used only by the bank chip's own funnel
+   shortcut, never shown in the filter builder's field dropdown) matches a
+   single course by id rather than by a displayed field value. The special
+   value BLANK_FIELD_VALUE matches items where that field is empty/unset —
    e.g. "Section" + BLANK_FIELD_VALUE = courses with no section mentioned. */
 const BLANK_FIELD_VALUE = '__blank__';
-function courseMatchesFilters(course){
+function placementMatchesFilters(course, placement){
   if(activeFilters.length === 0) return true;
   return activeFilters.every(rule=>{
     if(rule.field === '__courseId') return course.id === rule.value;
     if(rule.value === '') return false;
-    const raw = String(course[rule.field] ?? '').trim();
+    const source = rule.slot ? placement : course;
+    const raw = String(source?.[rule.field] ?? '').trim();
     if(rule.value === BLANK_FIELD_VALUE) return raw === '';
     return raw === rule.value;
   });
 }
 
-/* Whether any course currently has this field blank/unset — used to decide
+/* The items a rule's field is read from: placed classes (that still have a
+   course) for slot fields, courses for course fields. */
+function filterSourceItems(isSlot){
+  return isSlot ? state.placements.filter(p=> courseById(p.courseId)) : state.courses;
+}
+
+/* Whether any item currently has this field blank/unset — used to decide
    whether to offer the "(Blank / not mentioned)" option in the value
    dropdown, same "only show real, matchable options" approach as the
    distinct-value list below. */
-function fieldHasBlankValue(fieldKey){
-  return state.courses.some(c=> String(c[fieldKey] ?? '').trim() === '');
+function fieldHasBlankValue(fieldKey, isSlot){
+  return filterSourceItems(isSlot).some(item=> String(item[fieldKey] ?? '').trim() === '');
 }
 
 /* Distinct, non-empty values currently present for a given field across all
-   courses — used to populate each rule's value dropdown so choices are
-   always valid/real rather than free-text guesses. */
-function distinctFieldValues(fieldKey){
+   courses (or all placed classes, for slot fields) — used to populate each
+   rule's value dropdown so choices are always valid/real rather than
+   free-text guesses. */
+function distinctFieldValues(fieldKey, isSlot){
   const values = new Set();
-  state.courses.forEach(c=>{
-    const v = c[fieldKey];
+  filterSourceItems(isSlot).forEach(item=>{
+    const v = item[fieldKey];
     if(v !== undefined && v !== null && String(v).trim() !== '') values.add(String(v));
   });
   return Array.from(values).sort((a,b)=> a.localeCompare(b, undefined, { numeric:true, sensitivity:'base' }));
@@ -1067,10 +1083,10 @@ function distinctFieldValues(fieldKey){
    filter rule: the first real distinct value if any exist, otherwise the
    "(Blank / not mentioned)" sentinel if that's a real option, otherwise
    empty (renders as the disabled "No values found" state). */
-function defaultValueForField(fieldKey){
-  const values = distinctFieldValues(fieldKey);
+function defaultValueForField(fieldKey, isSlot){
+  const values = distinctFieldValues(fieldKey, isSlot);
   if(values.length > 0) return values[0];
-  if(fieldHasBlankValue(fieldKey)) return BLANK_FIELD_VALUE;
+  if(fieldHasBlankValue(fieldKey, isSlot)) return BLANK_FIELD_VALUE;
   return '';
 }
 
@@ -1111,8 +1127,10 @@ function toggleChipFilter(courseId){
   renderGrid();
 }
 
-function updateFilterRuleField(index, fieldKey){
-  activeFilters[index] = { field: fieldKey, value: defaultValueForField(fieldKey) };
+function updateFilterRuleField(index, fieldKey, isSlot){
+  const rule = { field: fieldKey, value: defaultValueForField(fieldKey, isSlot) };
+  if(isSlot) rule.slot = true;
+  activeFilters[index] = rule;
   renderFiltersModal();
   renderBank();
   renderGrid();
@@ -1140,19 +1158,34 @@ function renderFiltersModal(){
     const row = document.createElement('div');
     row.className = 'filter-rule';
 
+    const isSlotRule = !!rule.slot;
     const fieldSelect = document.createElement('select');
-    state.fields.forEach(f=>{
-      const opt = document.createElement('option');
-      opt.value = f.key;
-      opt.textContent = f.label || f.key;
-      if(f.key === rule.field) opt.selected = true;
-      fieldSelect.appendChild(opt);
+    // Option values are "course:<key>" / "slot:<key>" so a course field and
+    // a slot field that happen to share a key can never be confused.
+    const addFieldGroup = (groupLabel, list, isSlot)=>{
+      if(!list.length) return;
+      const group = document.createElement('optgroup');
+      group.label = groupLabel;
+      list.forEach(f=>{
+        const opt = document.createElement('option');
+        opt.value = (isSlot ? 'slot:' : 'course:') + f.key;
+        opt.textContent = f.label || f.key;
+        if(f.key === rule.field && isSlot === isSlotRule) opt.selected = true;
+        group.appendChild(opt);
+      });
+      fieldSelect.appendChild(group);
+    };
+    addFieldGroup('Course fields', state.fields, false);
+    addFieldGroup('Slot fields', state.slotFields, true);
+    fieldSelect.addEventListener('change', ()=>{
+      const raw = fieldSelect.value;
+      const sep = raw.indexOf(':');
+      updateFilterRuleField(index, raw.slice(sep + 1), raw.slice(0, sep) === 'slot');
     });
-    fieldSelect.addEventListener('change', ()=> updateFilterRuleField(index, fieldSelect.value));
 
     const valueSelect = document.createElement('select');
-    const values = distinctFieldValues(rule.field);
-    const hasBlank = fieldHasBlankValue(rule.field);
+    const values = distinctFieldValues(rule.field, isSlotRule);
+    const hasBlank = fieldHasBlankValue(rule.field, isSlotRule);
     if(values.length === 0 && !hasBlank){
       const opt = document.createElement('option');
       opt.value = '';
@@ -1164,7 +1197,12 @@ function renderFiltersModal(){
       values.forEach(v=>{
         const opt = document.createElement('option');
         opt.value = v;
-        opt.textContent = v;
+        // Long / multi-line values (e.g. notes) are shown on one truncated
+        // line so the dropdown stays a sensible width; the real value is
+        // still what gets matched.
+        const shown = v.replace(/\s+/g, ' ').trim();
+        opt.textContent = shown.length > 60 ? shown.slice(0, 57) + '...' : shown;
+        opt.title = v;
         if(v === rule.value) opt.selected = true;
         valueSelect.appendChild(opt);
       });
@@ -1205,38 +1243,45 @@ function renderFiltersModal(){
   if(window.lucide) lucide.createIcons();
 }
 
-/* Returns the set of course IDs currently matched by activeFilters, for use
-   by the two grid-mutating actions below. */
-function filteredCourseIds(){
-  return new Set(state.courses.filter(c=>courseMatchesFilters(c)).map(c=>c.id));
+/* Returns the set of placement IDs currently matched by activeFilters, for
+   use by the two grid-mutating actions below. Matching is per placed class
+   (not per course) so slot-field rules like Room Number work; for course
+   -field-only filters this is simply every placement of a matched course. */
+function filteredPlacementIds(){
+  const ids = new Set();
+  state.placements.forEach(p=>{
+    const course = courseById(p.courseId);
+    if(course && placementMatchesFilters(course, p)) ids.add(p.id);
+  });
+  return ids;
 }
 
-/* "Keep filtered & remove others": placements for matched courses stay,
-   every other placement is removed from the grid. Course bank untouched. */
+/* "Keep filtered & remove others": matched placements stay, every other
+   placement is removed from the grid. Course bank untouched. */
 function applyFilterKeepMatched(){
   if(activeFilters.length === 0) return;
-  const matchedIds = filteredCourseIds();
-  const toRemove = state.placements.filter(p=>!matchedIds.has(p.courseId)).length;
+  const matchedIds = filteredPlacementIds();
+  const toRemove = state.placements.filter(p=>!matchedIds.has(p.id)).length;
   if(toRemove === 0){ showToast('Nothing to remove — everything on the grid already matches.', 'error'); return; }
   if(!confirm(`Remove ${toRemove} placement${toRemove===1?'':'s'} that don't match the current filters? Your course bank stays intact.`)) return;
-  state.placements = state.placements.filter(p=>matchedIds.has(p.courseId));
+  state.placements = state.placements.filter(p=>matchedIds.has(p.id));
   saveState();
   renderGrid();
-  showToast('Kept filtered courses, removed the rest.');
+  showToast('Kept filtered classes, removed the rest.');
 }
 
-/* "Remove filtered & keep others": placements for matched courses are
-   removed, everything else on the grid stays. Course bank untouched. */
+/* "Remove filtered & keep others": matched placements are removed,
+   everything else on the grid stays. Course bank untouched. */
 function applyFilterKeepOthers(){
   if(activeFilters.length === 0) return;
-  const matchedIds = filteredCourseIds();
-  const toRemove = state.placements.filter(p=>matchedIds.has(p.courseId)).length;
+  const matchedIds = filteredPlacementIds();
+  const toRemove = state.placements.filter(p=>matchedIds.has(p.id)).length;
   if(toRemove === 0){ showToast('No placements match the current filters.', 'error'); return; }
   if(!confirm(`Remove ${toRemove} placement${toRemove===1?'':'s'} that match the current filters? Your course bank stays intact.`)) return;
-  state.placements = state.placements.filter(p=>!matchedIds.has(p.courseId));
+  state.placements = state.placements.filter(p=>!matchedIds.has(p.id));
   saveState();
   renderGrid();
-  showToast('Removed filtered courses, kept the rest.');
+  showToast('Removed filtered classes, kept the rest.');
 }
 
 /* Updates the small count badge and active-state styling on the "Filters"

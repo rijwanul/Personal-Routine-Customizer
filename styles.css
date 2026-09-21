@@ -562,6 +562,9 @@ body.click-cell-enabled .g-slot{ cursor:pointer; }
   animation: modalIn 200ms cubic-bezier(.2,.8,.2,1);
 }
 .modal--wide{ max-width: 640px; }
+/* Filters dialog is a bit wider so "Clear filters" + both actions fit on one row */
+.modal--filters{ max-width: 740px; }
+.modal--filters .modal__foot .btn{ white-space:nowrap; }
 .json-textarea{
   width:100%; min-height:260px; padding: 12px 14px; border-radius:9px;
   border: 1.5px solid var(--hairline-strong); background: var(--paper); color: var(--ink);
